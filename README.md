@@ -164,9 +164,14 @@ APK-dan başqa **heç nə lazım deyil**. Üz aşkarlama modelləri (ML Kit blaz
 
 | Telefon | Fayl |
 |---|---|
-| Demək olar bütün müasir telefonlar | `app-arm64-v8a-release.apk` (~17 MB) |
-| Çox köhnə 32-bit cihazlar | `app-armeabi-v7a-release.apk` |
-| Bilmirsinizsə | `app-universal-release.apk` (~52 MB, hamısını əhatə edir) |
+| Bilmirsinizsə / linkdən endirirsinizsə | `pixclean.apk` (~25 MB, hər telefonda işləyir) |
+| Müasir telefonlar (64-bit ARM) | `pixclean-arm64-v8a.apk` (~17 MB) |
+| Köhnə 32-bit cihazlar | `pixclean-armeabi-v7a.apk` (~13 MB) |
+
+APK-nın yarıdan çoxu native kitabxanadır (ML Kit üz detektoru + TensorFlow Lite) və native kod
+hər prosessor arxitekturası üçün ayrıca kompilyasiya olunur. x86 kitabxanaları buraxılışdan
+çıxarılıb — onlar emulyator, Chromebook və Windows Subsystem for Android üçündür, telefonda
+işə yaramır və universal faylın 52 MB-ının 27 MB-ını tuturdular.
 
 Play Store-dan gəlmədiyi üçün telefon «naməlum mənbə»yə icazə istəyəcək — APK-nı hansı
 tətbiqlə açırsınızsa (brauzer, fayl meneceri), ona bir dəfə icazə verin.

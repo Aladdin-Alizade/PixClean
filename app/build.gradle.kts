@@ -30,6 +30,11 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         vectorDrawables { useSupportLibrary = true }
+
+        // No phone runs x86. Those libraries exist for emulators, Chromebooks and
+        // Windows Subsystem for Android, and they were 27 MB of the 52 MB universal
+        // APK — more than half the download, for hardware none of its users have.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -61,13 +66,14 @@ android {
     }
     buildFeatures { compose = true }
 
-    // Half the release APK was x86 native code that only an emulator can run. Split it so a
-    // phone downloads roughly 21 MB instead of 55 MB; the universal APK stays for sideloading.
+    // Per-ABI builds for anyone who wants the smallest file; the universal one carries both
+    // remaining architectures and is what the stable download link points at, because someone
+    // following a link does not know their CPU.
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            include("arm64-v8a", "armeabi-v7a")
             isUniversalApk = true
         }
     }
