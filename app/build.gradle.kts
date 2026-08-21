@@ -27,8 +27,8 @@ android {
         applicationId = "az.pixclean"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.0"
         vectorDrawables { useSupportLibrary = true }
 
         // No phone runs x86. Those libraries exist for emulators, Chromebooks and
