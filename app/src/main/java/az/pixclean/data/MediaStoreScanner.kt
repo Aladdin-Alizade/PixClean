@@ -19,6 +19,7 @@ object MediaStoreScanner {
         MediaStore.Images.Media.HEIGHT,
         MediaStore.Images.Media.DATE_ADDED,
         MediaStore.Images.Media.DATE_MODIFIED,
+        MediaStore.Images.Media.DATE_TAKEN,
         MediaStore.Images.Media.MIME_TYPE,
         MediaStore.Images.Media.DATA,
     )
@@ -55,6 +56,7 @@ object MediaStoreScanner {
             val iH = c.getColumnIndexOrThrow(MediaStore.Images.Media.HEIGHT)
             val iAdded = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
             val iMod = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
+            val iTaken = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
             val iMime = c.getColumnIndexOrThrow(MediaStore.Images.Media.MIME_TYPE)
             val iData = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
 
@@ -76,6 +78,7 @@ object MediaStoreScanner {
                         height = c.getInt(iH),
                         dateAdded = c.getLong(iAdded),
                         dateModified = c.getLong(iMod),
+                        dateTaken = if (c.isNull(iTaken)) 0L else c.getLong(iTaken),
                         mime = c.getString(iMime) ?: "image/*",
                     )
                 )

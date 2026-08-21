@@ -16,7 +16,7 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
 
     companion object {
         private const val NAME = "pixclean.db"
-        private const val VERSION = 3
+        private const val VERSION = 4
 
         fun floatsToBlob(v: FloatArray): ByteArray {
             val bb = ByteBuffer.allocate(v.size * 4).order(ByteOrder.LITTLE_ENDIAN)
@@ -49,6 +49,7 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
               height INTEGER NOT NULL,
               dateAdded INTEGER NOT NULL,
               dateModified INTEGER NOT NULL,
+              dateTaken INTEGER NOT NULL DEFAULT 0,
               mime TEXT NOT NULL,
               sha TEXT,
               dhash INTEGER NOT NULL DEFAULT 0,
@@ -105,8 +106,16 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Adding a column is not a reason to make somebody scan ten thousand photos again.
-        if (oldVersion == 2 && newVersion == 3) {
-            runCatching { db.execSQL("ALTER TABLE faces ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") }
+        if (oldVersion >= 2 && newVersion <= 4) {
+            if (oldVersion < 3) {
+                runCatching { db.execSQL("ALTER TABLE faces ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") }
+            }
+            if (oldVersion < 4) {
+                runCatching { db.execSQL("ALTER TABLE photos ADD COLUMN dateTaken INTEGER NOT NULL DEFAULT 0") }
+                // Capture time is new information, so the rows have to be read again — but only
+                // the listing, not the hashes, which stay valid.
+                runCatching { db.execSQL("UPDATE photos SET dateModified = 0") }
+            }
             return
         }
         db.execSQL("DROP TABLE IF EXISTS photos")
@@ -132,11 +141,11 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
 
         val insert = db.compileStatement(
             "INSERT OR REPLACE INTO photos" +
-                "(id,name,bucket,relPath,size,width,height,dateAdded,dateModified,mime,sha,dhash,phash,colorSig,sigVersion,docUri)" +
-                " VALUES (?,?,?,?,?,?,?,?,?,?,NULL,0,0,NULL,0,?)"
+                "(id,name,bucket,relPath,size,width,height,dateAdded,dateModified,dateTaken,mime,sha,dhash,phash,colorSig,sigVersion,docUri)" +
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,NULL,0,0,NULL,0,?)"
         )
         val touch = db.compileStatement(
-            "UPDATE photos SET name=?,bucket=?,relPath=?,width=?,height=?,dateAdded=?,mime=? WHERE id=?"
+            "UPDATE photos SET name=?,bucket=?,relPath=?,width=?,height=?,dateAdded=?,dateTaken=?,mime=? WHERE id=?"
         )
 
         db.beginTransaction()
@@ -147,15 +156,17 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
                     touch.clearBindings()
                     touch.bindString(1, p.name); touch.bindString(2, p.bucket); touch.bindString(3, p.relPath)
                     touch.bindLong(4, p.width.toLong()); touch.bindLong(5, p.height.toLong())
-                    touch.bindLong(6, p.dateAdded); touch.bindString(7, p.mime); touch.bindLong(8, p.id)
+                    touch.bindLong(6, p.dateAdded); touch.bindLong(7, p.dateTaken)
+                    touch.bindString(8, p.mime); touch.bindLong(9, p.id)
                     touch.executeUpdateDelete()
                 } else {
                     insert.clearBindings()
                     insert.bindLong(1, p.id); insert.bindString(2, p.name); insert.bindString(3, p.bucket)
                     insert.bindString(4, p.relPath); insert.bindLong(5, p.size)
                     insert.bindLong(6, p.width.toLong()); insert.bindLong(7, p.height.toLong())
-                    insert.bindLong(8, p.dateAdded); insert.bindLong(9, p.dateModified); insert.bindString(10, p.mime)
-                    p.docUri?.let { insert.bindString(11, it) }
+                    insert.bindLong(8, p.dateAdded); insert.bindLong(9, p.dateModified)
+                    insert.bindLong(10, p.dateTaken); insert.bindString(11, p.mime)
+                    p.docUri?.let { insert.bindString(12, it) }
                     insert.executeInsert()
                 }
             }
@@ -173,7 +184,7 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
     fun allPhotos(): List<Photo> {
         val out = ArrayList<Photo>(4096)
         readableDatabase.rawQuery(
-            "SELECT id,name,bucket,relPath,size,width,height,dateAdded,dateModified,mime,sha,dhash,phash,colorSig,sigVersion,docUri FROM photos",
+            "SELECT id,name,bucket,relPath,size,width,height,dateAdded,dateModified,dateTaken,mime,sha,dhash,phash,colorSig,sigVersion,docUri FROM photos",
             null
         ).use { c ->
             while (c.moveToNext()) out.add(readPhoto(c))
@@ -184,12 +195,13 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
     private fun readPhoto(c: android.database.Cursor) = Photo(
         id = c.getLong(0), name = c.getString(1), bucket = c.getString(2), relPath = c.getString(3),
         size = c.getLong(4), width = c.getInt(5), height = c.getInt(6),
-        dateAdded = c.getLong(7), dateModified = c.getLong(8), mime = c.getString(9),
-        sha = if (c.isNull(10)) null else c.getString(10),
-        dHash = c.getLong(11), pHash = c.getLong(12),
-        colorSig = if (c.isNull(13)) null else c.getBlob(13),
-        sigVersion = c.getInt(14),
-        docUri = if (c.isNull(15)) null else c.getString(15),
+        dateAdded = c.getLong(7), dateModified = c.getLong(8), dateTaken = c.getLong(9),
+        mime = c.getString(10),
+        sha = if (c.isNull(11)) null else c.getString(11),
+        dHash = c.getLong(12), pHash = c.getLong(13),
+        colorSig = if (c.isNull(14)) null else c.getBlob(14),
+        sigVersion = c.getInt(15),
+        docUri = if (c.isNull(16)) null else c.getString(16),
     )
 
     fun writeShas(rows: List<Pair<Long, String>>) = bulk(

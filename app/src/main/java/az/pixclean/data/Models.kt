@@ -15,6 +15,8 @@ class Photo(
     val height: Int,
     val dateAdded: Long,
     val dateModified: Long,
+    /** EXIF capture time in millis, 0 when the file never carried one. */
+    val dateTaken: Long = 0L,
     val mime: String,
     val sha: String? = null,
     val dHash: Long = 0L,
@@ -29,6 +31,12 @@ class Photo(
             ?: ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
 
     val fromFolder: Boolean get() = docUri != null
+
+    /**
+     * When the picture was taken, falling back to the file's own timestamp. A downloaded photo
+     * has no capture time, and filing it under the day it was copied is better than nothing.
+     */
+    val capturedAt: Long get() = if (dateTaken > 0) dateTaken else dateModified * 1000L
     val pixels: Long get() = width.toLong() * height.toLong()
     val hasSignature: Boolean get() = sigVersion >= Signatures.VERSION && colorSig != null
 
@@ -39,7 +47,7 @@ class Photo(
         colorSig: ByteArray? = this.colorSig,
         sigVersion: Int = this.sigVersion,
     ) = Photo(
-        id, name, bucket, relPath, size, width, height, dateAdded, dateModified, mime,
+        id, name, bucket, relPath, size, width, height, dateAdded, dateModified, dateTaken, mime,
         sha, dHash, pHash, colorSig, sigVersion, docUri
     )
 

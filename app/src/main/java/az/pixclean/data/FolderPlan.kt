@@ -45,4 +45,36 @@ object FolderPlans {
         }
         return out
     }
+
+    private val MONTHS = arrayOf(
+        "Yanvar", "Fevral", "Mart", "Aprel", "May", "İyun",
+        "İyul", "Avqust", "Sentyabr", "Oktyabr", "Noyabr", "Dekabr",
+    )
+
+    /**
+     * One folder per month of capture. The name leads with the numeric year and month so a
+     * file browser sorts them chronologically rather than alphabetically by month name.
+     *
+     * Capture time comes from EXIF where the photo has it. A downloaded or copied picture has
+     * none, and falls back to the file's own timestamp — wrong for some, but a photo filed
+     * under the month it arrived beats a photo filed nowhere.
+     */
+    fun forMonths(photos: List<Photo>): List<ProposedFolder> {
+        val calendar = java.util.Calendar.getInstance()
+        return photos
+            .groupBy { photo ->
+                calendar.timeInMillis = photo.capturedAt
+                calendar.get(java.util.Calendar.YEAR) * 100 + calendar.get(java.util.Calendar.MONTH)
+            }
+            .toSortedMap(compareByDescending { it })
+            .map { (stamp, group) ->
+                val year = stamp / 100
+                val month = stamp % 100
+                ProposedFolder(
+                    key = "month-$stamp",
+                    suggestedName = "%04d-%02d %s".format(year, month + 1, MONTHS[month]),
+                    photoIds = group.map { it.id },
+                )
+            }
+    }
 }

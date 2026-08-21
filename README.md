@@ -13,6 +13,7 @@ qruplaşdırır. Hər şey telefonun içində işləyir — nə şəkil, nə də
 | **Oxşar şəkillər** | Yenidən sıxılmış, kiçildilmiş, EXIF ilə çevrilmiş nüsxələr — WhatsApp/Telegram-dan gələn variantlar. |
 | **Şəxslər** | Hər şəkildəki üzlər tapılır, vektora çevrilir və eyni adam bir qrupa yığılır. |
 | **Əməliyyatlar** | Solda saxlanan nüsxə, sağda dublikatlar. Seçib zibilə atmaq, həmişəlik silmək və ya başqa alboma köçürmək. |
+| **Qovluqlara ayırma** | Şəxslərə və ya aylara görə qovluqlar — əvvəlcə təklif göstərilir, adları dəyişə bilərsiniz, təsdiqdən sonra yaradılır. Avtomatik işləmir. |
 | **Qovluq seçimi** | İstənilən qovluğu (path-i) seçib yalnız onu analiz edə bilərsiniz — alt qovluqları ilə birlikdə. |
 
 Minlərlə şəkil normaldır: nəticələr SQLite-da saxlanılır, ikinci taramada yalnız **yeni və dəyişmiş**

@@ -270,8 +270,11 @@ fun PixCleanRoot(broker: ConsentBroker) {
                     } else {
                         FolderPlanKind.PEOPLE
                     }
-                    val proposals = remember(kind, state.people) {
-                        FolderPlans.forPeople(state.people)
+                    val proposals = remember(kind, state.people, state.photoIndex) {
+                        when (kind) {
+                            FolderPlanKind.PEOPLE -> FolderPlans.forPeople(state.people)
+                            FolderPlanKind.MONTHS -> FolderPlans.forMonths(state.photoIndex.values.toList())
+                        }
                     }
                     FoldersScreen(
                         kind = kind,

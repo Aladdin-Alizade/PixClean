@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Difference
@@ -165,6 +166,14 @@ fun HomeScreen(
                 ) {
                     Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(18.dp))
                     Text("Şəxslərə görə qovluqlara ayır", Modifier.padding(start = Space.sm))
+                }
+                OutlinedButton(
+                    onClick = { onOpen("folders/months") },
+                    enabled = !state.running && state.photoCount > 0,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Rounded.CalendarMonth, null, Modifier.size(18.dp))
+                    Text("Aylara görə qovluqlara ayır", Modifier.padding(start = Space.sm))
                 }
             }
         }
