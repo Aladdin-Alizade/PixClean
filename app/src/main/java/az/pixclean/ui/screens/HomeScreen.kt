@@ -243,18 +243,18 @@ private fun ModelHint(onSettings: () -> Unit) {
             )
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                 Text(
-                    "Üz tanıma sadə rejimdədir",
+                    "Üz tanıma məhdud rejimdədir",
                     style = MaterialTheme.typography.titleMedium,
                     color = PixTheme.colors.onSimilarContainer,
                 )
                 Text(
-                    "Üz tanıma modeli əlavə etsəniz eyni adamı illər sonra da tanıyacaq. " +
-                        "İndiki rejim yalnız yaxın vaxtda, oxşar şəraitdə çəkilmiş üzlərdə işləyir.",
+                    "Tətbiqin içindəki üz tanıma modeli yüklənmədi, ona görə sadə üsul işləyir — " +
+                        "bu, yalnız yaxın vaxtda, oxşar şəraitdə çəkilmiş üzlərdə etibarlıdır.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = PixTheme.colors.onSimilarContainer,
                 )
                 TextButton(onClick = onSettings, contentPadding = PaddingValues(0.dp)) {
-                    Text("Model əlavə et", color = PixTheme.colors.similar)
+                    Text("Tənzimləmələrə bax", color = PixTheme.colors.similar)
                 }
             }
         }

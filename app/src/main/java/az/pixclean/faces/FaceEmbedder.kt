@@ -43,14 +43,18 @@ object FaceEmbedders {
 
     fun modelPath(context: Context) = File(File(context.filesDir, "models"), MODEL_FILE)
 
-    fun hasModel(context: Context): Boolean =
-        modelPath(context).let { it.exists() && it.length() > 1024 } || assetExists(context)
-
-    private fun assetExists(context: Context): Boolean = try {
+    /** The model shipped inside the APK. Present on every install; nothing to set up. */
+    fun hasBundledModel(context: Context): Boolean = try {
         context.assets.list("")?.contains(MODEL_FILE) == true
     } catch (_: Exception) {
         false
     }
+
+    /** A model the user chose themselves, which takes precedence over the bundled one. */
+    fun hasImportedModel(context: Context): Boolean =
+        modelPath(context).let { it.exists() && it.length() > 1024 }
+
+    fun hasModel(context: Context): Boolean = hasImportedModel(context) || hasBundledModel(context)
 
     /**
      * Loads the file as a model and checks its tensors make sense for a face embedder.
@@ -81,7 +85,7 @@ object FaceEmbedders {
             runCatching { return TFLiteEmbedder(mapFile(imported), imported.length()) }
                 .onFailure { Log.w(TAG, "imported model unusable, falling back", it) }
         }
-        if (assetExists(context)) {
+        if (hasBundledModel(context)) {
             runCatching {
                 val afd = context.assets.openFd(MODEL_FILE)
                 val buffer = FileInputStream(afd.fileDescriptor).channel

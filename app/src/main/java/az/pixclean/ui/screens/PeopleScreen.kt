@@ -231,9 +231,9 @@ private fun AccuracyNote() {
                 modifier = Modifier.padding(top = 2.dp).size(20.dp),
             )
             Text(
-                "Bu qruplar sadə üsulla qurulub: eyni vaxtda, oxşar işıqda çəkilmiş üzləri yaxşı tutur, " +
-                    "illər ərzində dəyişən sifətləri tutmur. Tənzimləmələrdən üz tanıma modeli " +
-                    "əlavə etsəniz xeyli dəqiqləşəcək.",
+                "Üz tanıma modeli yüklənmədi, ona görə bu qruplar sadə üsulla qurulub: " +
+                    "eyni vaxtda, oxşar işıqda çəkilmiş üzləri tutur, illər ərzində dəyişən " +
+                    "sifətləri tutmur.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = PixTheme.colors.onSimilarContainer,
             )

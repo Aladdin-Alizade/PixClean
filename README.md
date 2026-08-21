@@ -97,38 +97,17 @@ ML Kit ilə üz tapılır → keyfiyyət süzgəci → gözlərə görə düzlə
 
 ## Üz tanıma: yaxşı işləməsi üçün
 
-### 1. Model əlavə edin — ən vacib addım
+### 1. Model artıq içindədir
 
-Modelsiz tətbiq sadə HOG deskriptoru işlədir: eyni gün, eyni işıqda çəkilmiş üzləri tutur,
-illər arası dəyişikliyi yox. Əsl üz tanıma üçün `.tflite` model lazımdır.
+Üz tanıma modeli (**MobileFaceNet**, 5 MB) APK ilə birlikdə gəlir. İstifadəçi heç nə yükləmir,
+heç nə seçmir — tətbiq quraşdırılan kimi tam tanıma rejimində işləyir.
 
-| Model | Ölçü | Giriş | Çıxış | Qeyd |
-|---|---|---|---|---|
-| **MobileFaceNet** | ~5 MB | 112×112 | 192-d | **Tövsiyə olunan.** Sürətli, telefon üçün nəzərdə tutulub |
-| FaceNet | ~23 MB | 160×160 | 128-d | Böyük və yavaş, üstünlüyü azdır |
-| ArcFace / InsightFace (TFLite ixracı) | 5–25 MB | 112×112 | 512-d | Dəqiqliyi ən yüksək variantlar |
+Modelin mənbəyi, lisenziyası və SHA-256-sı [NOTICE.md](NOTICE.md) faylındadır (MIT).
 
-Faylı özünüz endirin (tətbiq heç nə endirmir). Yoxlanılmış mənbələr:
-
-```bash
-curl -L -o mobile_face_net.tflite \
-  https://github.com/estebanuri/face_recognition/raw/master/android/app/src/main/assets/mobile_face_net.tflite
-```
-
-FaceNet variantı üçün: `shubham0204/FaceRecognition_With_FaceNet_Android` deposunda
-`app/src/main/assets/facenet.tflite`. Model faylları üçüncü tərəf depolarındandır — endirməzdən
-əvvəl mənbəyə baxın.
-
-Sonra: faylı telefona köçürün → **Tənzimləmələr → Üz tanıma modeli → Model faylı seç**.
-
-Import zamanı fayl **həqiqətən yüklənərək** yoxlanılır — TFLite deyilsə və ya çıxış ölçüsü
-məntiqsizdirsə qəbul edilmir. Model qəbul olunanda köhnə vektorlar avtomatik silinir, ona görə
-**«Üzləri tara»nı bir dəfə təkrar işlədin**.
-
-Tətbiq modelin giriş ölçüsünü, çıxış ölçüsünü, kvantlaşdırmasını və **normalizasiya
-konvensiyasını** özü tanıyır: 112×112 girişlərdə ArcFace üsulu `(x−127.5)/128`, 160×160
-girişlərdə FaceNet üsulu (şəkil üzrə standartlaşdırma). Üz kəsimi birbaşa modelin giriş
-ölçüsündə düzləndirilir — aralıq miqyaslama yoxdur.
+İstəsəniz **Tənzimləmələr → Üz tanıma modeli → Öz modelinizi yükləyin** ilə başqa `.tflite`
+faylı ilə əvəz edə bilərsiniz. Fayl qəbul edilməzdən əvvəl həqiqətən yüklənərək yoxlanılır;
+tutmasa tətbiq öz modelinə qayıdır. Giriş ölçüsü normalizasiyanı özü müəyyən edir: 112×112
+girişlərdə ArcFace üsulu, 160×160 girişlərdə FaceNet üsulu.
 
 ### 2. Simptoma görə tənzimləmə
 
@@ -164,9 +143,9 @@ APK-dan başqa **heç nə lazım deyil**. Üz aşkarlama modelləri (ML Kit blaz
 
 | Telefon | Fayl |
 |---|---|
-| Bilmirsinizsə / linkdən endirirsinizsə | `pixclean.apk` (~25 MB, hər telefonda işləyir) |
-| Müasir telefonlar (64-bit ARM) | `pixclean-arm64-v8a.apk` (~17 MB) |
-| Köhnə 32-bit cihazlar | `pixclean-armeabi-v7a.apk` (~13 MB) |
+| Bilmirsinizsə / linkdən endirirsinizsə | `pixclean.apk` (~30 MB, hər telefonda işləyir) |
+| Müasir telefonlar (64-bit ARM) | `pixclean-arm64-v8a.apk` (~22 MB) |
+| Köhnə 32-bit cihazlar | `pixclean-armeabi-v7a.apk` (~18 MB) |
 
 APK-nın yarıdan çoxu native kitabxanadır (ML Kit üz detektoru + TensorFlow Lite) və native kod
 hər prosessor arxitekturası üçün ayrıca kompilyasiya olunur. x86 kitabxanaları buraxılışdan
@@ -192,8 +171,7 @@ uses-permission: FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC
 
 Yəni «heç nə cihazdan kənara çıxmır» sadəcə vəd deyil — əməliyyat sistemi bunu təmin edir.
 
-İstəyə bağlı tək əlavə fayl: üz tanıma `.tflite` modeli (yuxarıdakı bölmə). O da quraşdırılmır,
-sadəcə tətbiqin içindən seçilir.
+Üz tanıma modeli də APK-nın içindədir — ayrıca heç nə yükləmək lazım deyil.
 
 ---
 

@@ -68,7 +68,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val actions = LocalActions.current
     val scope = rememberCoroutineScope()
-    var modelPresent by remember { mutableStateOf(FaceEmbedders.hasModel(context)) }
+    var imported by remember { mutableStateOf(FaceEmbedders.hasImportedModel(context)) }
 
     val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -106,7 +106,7 @@ fun SettingsScreen(
                     }
                 }.getOrElse { staging.delete(); "Fayl oxunmadı" }
             }
-            modelPresent = FaceEmbedders.hasModel(context)
+            imported = FaceEmbedders.hasImportedModel(context)
             if (error == null) {
                 actions.toast("Model əlavə olundu. Üzləri yenidən tarayın.")
                 engine.resetFaceIndex()
@@ -333,23 +333,26 @@ fun SettingsScreen(
             Group(
                 "Üz tanıma modeli",
                 when {
-                    state.modelBacked -> "Model quraşdırılıb — tam dəqiqlik rejimi işləyir."
-                    modelPresent -> "Model faylı var, amma açılmır — sadə rejim işləyir. " +
-                        "Faylı silib başqasını seçin."
-                    else -> "Hazırda sadə rejim işləyir. Üz tanıma modeli əlavə etsəniz eyni adamı " +
-                        "illər sonra da tanıyacaq. Hansı fayl lazım olduğu README-də yazılıb."
+                    state.modelBacked && imported ->
+                        "Sizin yüklədiyiniz model işləyir. Silsəniz tətbiqin öz modelinə qayıdacaq."
+                    state.modelBacked ->
+                        "Model tətbiqin içindədir və işləyir — heç nə yükləmək lazım deyil."
+                    imported ->
+                        "Yüklədiyiniz fayl açılmır. Silsəniz tətbiqin öz modeli işə düşəcək."
+                    else ->
+                        "Model yüklənmədi, sadə rejim işləyir."
                 },
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     OutlinedButton(onClick = { importModel.launch(arrayOf("*/*")) }) {
-                        Text(if (modelPresent) "Modeli dəyiş" else "Model faylı seç")
+                        Text(if (imported) "Başqa model seç" else "Öz modelinizi yükləyin")
                     }
-                    if (modelPresent) {
+                    if (imported) {
                         TextButton(onClick = {
                             FaceEmbedders.modelPath(context).delete()
-                            modelPresent = FaceEmbedders.hasModel(context)
+                            imported = FaceEmbedders.hasImportedModel(context)
                             engine.resetFaceIndex()
-                            actions.toast("Model silindi")
+                            actions.toast("Tətbiqin öz modelinə qayıdıldı")
                         }) { Text("Sil", color = MaterialTheme.colorScheme.error) }
                     }
                 }

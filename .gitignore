@@ -14,4 +14,3 @@ captures/
 *.keystore
 *.jks
 !debug.keystore
-app/src/main/assets/*.tflite
