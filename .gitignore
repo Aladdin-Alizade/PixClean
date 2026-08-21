@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+.idea/
+build/
+local.properties
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+# Signing material never goes in the repo — a key in git is a key anyone can
+# publish with. Both extensions, because keytool defaults to .jks.
+*.keystore
+*.jks
+!debug.keystore
+app/src/main/assets/*.tflite

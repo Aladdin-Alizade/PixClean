@@ -1,0 +1,139 @@
+# Builds the app from a tag, signs it, and publishes the APKs as GitHub release
+# assets — so the download is served by GitHub rather than by anything of mine,
+# and the link never has to change:
+#
+#   https://github.com/<owner>/<repo>/releases/latest/download/pixclean.apk
+#
+# That URL resolves to whatever the newest release calls `pixclean.apk`, which is
+# why the asset is renamed rather than published under its Gradle name.
+name: Release
+
+# A tag is the only way in. Pushing `v1.2.3` publishes v1.2.3 and nothing else
+# does, so there is no path to a release that no commit accounts for.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  # Creating the release and uploading the assets. Nothing else is needed.
+  contents: write
+
+jobs:
+  apk:
+    name: Build, sign and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # AGP does not download missing SDK components any more, so the platform
+      # this app compiles against has to be here before Gradle starts.
+      - name: Android SDK packages
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      # A tag that disagrees with the version inside the app produces a release
+      # whose name is a guess. Cheaper to stop here than to explain later which
+      # of the two numbers was the real one.
+      - name: The tag has to match versionName
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts)"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME says $tag, app/build.gradle.kts says $version."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The build reads signing material from local.properties, the same file it
+      # reads on a laptop — CI is just another machine with its own copy. The file
+      # is gitignored, and `sdk.dir` is left out on purpose: without it Gradle
+      # falls back to ANDROID_HOME, which the runner already sets.
+      - name: Machine setup
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 is not set. Android refuses to install an unsigned APK, so there would be nothing to release."
+            exit 1
+          fi
+
+          keystore="$RUNNER_TEMP/pixclean-release.jks"
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$keystore"
+
+          {
+            printf 'KEYSTORE_FILE=%s\n' "$keystore"
+            printf 'KEYSTORE_PASSWORD=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'KEY_ALIAS=%s\n' "$KEY_ALIAS"
+            printf 'KEY_PASSWORD=%s\n' "$KEY_PASSWORD"
+          } > local.properties
+
+      - name: Tests
+        run: ./gradlew --no-daemon test
+
+      - name: Build
+        run: ./gradlew --no-daemon assembleRelease
+
+      # Gradle writes `*-unsigned.apk` instead when signing did not happen.
+      # Publishing that would look like success and install on nothing.
+      #
+      # The universal APK carries every ABI and is what the stable link points at,
+      # because someone following a download link does not know their CPU. The
+      # per-ABI builds are published alongside it for anyone who wants the ~17 MB
+      # file instead of the ~52 MB one.
+      - name: Take the signed APKs
+        run: |
+          out="app/build/outputs/apk/release"
+          universal="$out/app-universal-release.apk"
+          if [ ! -f "$universal" ]; then
+            echo "::error::$universal was not produced — the build did not sign anything."
+            ls -l "$out" || true
+            exit 1
+          fi
+          cp "$universal" pixclean.apk
+          for abi in arm64-v8a armeabi-v7a; do
+            [ -f "$out/app-$abi-release.apk" ] && cp "$out/app-$abi-release.apk" "pixclean-$abi.apk"
+          done
+          ls -lh pixclean*.apk
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/latest/download/pixclean.apk"
+          cat > notes.md <<NOTES
+          **pixclean.apk** — imzalanmış release buildi, bütün telefonlar üçün.
+
+          Telefonda: faylı yüklə və aç. Android bir dəfə naməlum mənbədən
+          quraşdırmağa icazə istəyəcək — Play Store-dan gəlməyən hər şey üçün
+          normaldır. Başqa heç nə yükləmək lazım deyil: üz aşkarlama modelləri
+          APK-nın içindədir və tətbiqin internet icazəsi yoxdur.
+
+          Faylı kiçiltmək istəyirsinizsə, telefonunuza uyğun olanı seçin:
+          **pixclean-arm64-v8a.apk** (müasir telefonlar, ~17 MB) və ya
+          **pixclean-armeabi-v7a.apk** (köhnə 32-bit cihazlar).
+
+          Köhnə versiyanın üstünə quraşdırılır, tapılmış qruplar və verilmiş
+          adlar itmir.
+
+          Həmişə ən son buraxılış:
+          $latest
+          NOTES
+
+          gh release create "$GITHUB_REF_NAME" pixclean*.apk \
+            --title "PixClean ${{ steps.version.outputs.version }}" \
+            --notes-file notes.md
