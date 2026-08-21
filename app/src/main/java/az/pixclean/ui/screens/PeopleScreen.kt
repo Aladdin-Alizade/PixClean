@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -88,7 +89,7 @@ fun PeopleScreen(
             horizontalArrangement = Arrangement.spacedBy(Space.md),
             verticalArrangement = Arrangement.spacedBy(Space.lg),
         ) {
-            item(span = { GridItemSpanMax() }) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
                     Text("Şəxslər", style = MaterialTheme.typography.headlineSmall)
                     Row(
@@ -125,7 +126,7 @@ fun PeopleScreen(
             }
 
             if (!state.modelBacked) {
-                item(span = { GridItemSpanMax() }) { AccuracyNote() }
+                item(span = { GridItemSpan(maxLineSpan) }) { AccuracyNote() }
             }
 
             items(shown, key = { it.clusterId }) { person ->
@@ -144,7 +145,7 @@ fun PeopleScreen(
             }
 
             if (singles.isNotEmpty()) {
-                item(span = { GridItemSpanMax() }) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         "Tək qalan üzlər (${singles.size})",
                         style = MaterialTheme.typography.labelLarge,
@@ -170,9 +171,6 @@ fun PeopleScreen(
         }
     }
 }
-
-@Suppress("FunctionName")
-private fun GridItemSpanMax() = androidx.compose.foundation.lazy.grid.GridItemSpan(Int.MAX_VALUE)
 
 @Composable
 private fun PersonTile(

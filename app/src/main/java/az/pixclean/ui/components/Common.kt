@@ -22,11 +22,14 @@ import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +37,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import az.pixclean.ui.theme.Radius
 import az.pixclean.ui.theme.Space
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
 import coil3.compose.AsyncImage
 import java.util.Locale
 
@@ -70,8 +75,15 @@ fun PhotoThumb(
 }
 
 /**
- * A round crop of one face taken straight from the original photo. Boxes are stored square
- * and normalised, so the whole thing is two multiplications and no extra decoding pass.
+ * A round crop of one face, taken from the original photo.
+ *
+ * The obvious implementation — lay the image out at `size / faceFraction` and offset it — is
+ * wrong twice over: a face filling 5% of the frame asks for a 1900dp composable, which the
+ * image loader turns into a five-thousand-pixel decode, and the circle ends up empty because
+ * nothing that large ever arrives. Here the layout stays exactly one circle wide and the zoom
+ * happens in the draw layer, so the cost is a matrix rather than a bitmap. The source is
+ * requested in two fixed sizes so the memory cache still gets hits when one photo holds
+ * several faces.
  */
 @Composable
 fun FaceThumb(
@@ -85,8 +97,21 @@ fun FaceThumb(
     ring: Color? = null,
 ) {
     val norm = 10_000f
-    val fw = ((right - left) / norm).coerceAtLeast(0.02f)
-    val fh = ((bottom - top) / norm).coerceAtLeast(0.02f)
+    val fw = ((right - left) / norm).coerceIn(0.02f, 1f)
+    val fh = ((bottom - top) / norm).coerceIn(0.02f, 1f)
+    val cx = ((left + right) / 2f) / norm
+    val cy = ((top + bottom) / 2f) / norm
+
+    val density = LocalDensity.current
+    val platform = LocalPlatformContext.current
+    val requestPx = remember(fw, fh, size) {
+        val needed = with(density) { size.toPx() } / minOf(fw, fh)
+        if (needed <= 512f) 512 else 1024
+    }
+    val request = remember(model, requestPx) {
+        ImageRequest.Builder(platform).data(model).size(requestPx, requestPx).build()
+    }
+
     Box(
         modifier
             .size(size)
@@ -94,15 +119,20 @@ fun FaceThumb(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .then(if (ring != null) Modifier.border(2.dp, ring, CircleShape) else Modifier)
     ) {
-        val imageW = size / fw
-        val imageH = size / fh
         AsyncImage(
-            model = model,
+            model = request,
             contentDescription = null,
             contentScale = ContentScale.FillBounds,
             modifier = Modifier
-                .size(imageW, imageH)
-                .offset(x = -(imageW * (left / norm)), y = -(imageH * (top / norm))),
+                .fillMaxSize()
+                .graphicsLayer {
+                    // FillBounds maps the whole photo onto this square, so normalised
+                    // coordinates map linearly onto it and the zoom is just 1/fraction.
+                    scaleX = 1f / fw
+                    scaleY = 1f / fh
+                    translationX = -(cx - 0.5f) * this.size.width * scaleX
+                    translationY = -(cy - 0.5f) * this.size.height * scaleY
+                },
         )
     }
 }
