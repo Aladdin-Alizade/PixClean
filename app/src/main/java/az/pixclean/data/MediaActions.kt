@@ -144,6 +144,57 @@ object MediaActions {
         return ok
     }
 
+    /** Album names become folder names, so anything a file system would choke on comes out. */
+    fun sanitizeAlbum(name: String): String =
+        name.trim().replace(Regex("[^\\p{L}\\p{N} _.-]"), "").take(60).ifBlank { "PixClean" }
+
+    /**
+     * Files a batch of photos into several albums at once.
+     *
+     * One consent dialog covers the whole operation rather than one per folder: the system
+     * grants write access to a list of items, and only then does each photo get its new
+     * RELATIVE_PATH. Nothing exists on disk until that dialog is accepted, which is the point
+     * — the folder list is a proposal right up to that moment.
+     */
+    suspend fun organizeIntoFolders(
+        context: Context,
+        folders: List<Pair<String, List<Photo>>>,
+        broker: ConsentBroker,
+    ): Outcome {
+        val all = folders.flatMap { it.second }
+        if (all.isEmpty()) return Outcome(emptyList(), 0, "Seçim boşdur")
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val granted = broker.ask(
+                MediaStore.createWriteRequest(context.contentResolver, all.map { it.uri }).intentSender
+            )
+            if (!granted) return Outcome(emptyList(), 0, "Ləğv edildi — heç bir qovluq yaradılmadı")
+        }
+
+        val moved = ArrayList<Long>()
+        for ((rawName, photos) in folders) {
+            val album = sanitizeAlbum(rawName)
+            val relative = "${Environment.DIRECTORY_PICTURES}/$album/"
+            for (p in photos) {
+                val ok = try {
+                    context.contentResolver.update(
+                        p.uri,
+                        ContentValues().apply { put(MediaStore.Images.Media.RELATIVE_PATH, relative) },
+                        null, null,
+                    ) > 0
+                } catch (_: Exception) {
+                    false
+                }
+                if (ok) moved.add(p.id)
+            }
+        }
+        return Outcome(
+            moved, 0,
+            if (moved.isEmpty()) "Heç nə köçürülmədi"
+            else "${folders.size} qovluq yaradıldı · ${moved.size} şəkil köçürüldü",
+        )
+    }
+
     private suspend fun copyThenDelete(
         context: Context,
         photos: List<Photo>,

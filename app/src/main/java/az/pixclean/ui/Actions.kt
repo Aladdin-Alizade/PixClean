@@ -46,6 +46,20 @@ class Actions(
         }
     }
 
+    /** Files photos into the folders the user just approved. */
+    fun organize(folders: List<Pair<String, List<Photo>>>, onDone: () -> Unit = {}) {
+        if (folders.isEmpty()) return
+        scope.launch {
+            val outcome = MediaActions.organizeIntoFolders(context, folders, broker)
+            // The photos still exist, they just live somewhere else now. Dropping them from the
+            // index would leave the app claiming the gallery is empty, so re-read it instead —
+            // cached signatures make that near-instant.
+            if (outcome.succeeded.isNotEmpty()) engine.scanPhotos()
+            snackbar.showMessage(outcome.message)
+            onDone()
+        }
+    }
+
     fun toast(message: String) {
         scope.launch { snackbar.showMessage(message) }
     }

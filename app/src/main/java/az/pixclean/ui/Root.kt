@@ -52,9 +52,12 @@ import az.pixclean.core.MediaAccess
 import az.pixclean.core.Permissions
 import az.pixclean.core.Phase
 import az.pixclean.core.ScanEngine
+import az.pixclean.data.FolderPlanKind
+import az.pixclean.data.FolderPlans
 import az.pixclean.service.ScanService
 import az.pixclean.ui.components.EmptyState
 import az.pixclean.ui.screens.GroupDetailScreen
+import az.pixclean.ui.screens.FoldersScreen
 import az.pixclean.ui.screens.GroupsScreen
 import az.pixclean.ui.screens.HomeScreen
 import az.pixclean.ui.screens.PeopleScreen
@@ -259,6 +262,31 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         onOpenPerson = { navController.navigate("person/${it.clusterId}") },
                         onRename = engine::renamePerson,
                         onMerge = engine::mergePeople,
+                    )
+                }
+                composable("folders/{kind}") { entry ->
+                    val kind = if (entry.arguments?.getString("kind") == "months") {
+                        FolderPlanKind.MONTHS
+                    } else {
+                        FolderPlanKind.PEOPLE
+                    }
+                    val proposals = remember(kind, state.people) {
+                        FolderPlans.forPeople(state.people)
+                    }
+                    FoldersScreen(
+                        kind = kind,
+                        proposals = proposals,
+                        photoIndex = state.photoIndex,
+                        busy = state.running,
+                        contentPadding = inner,
+                        onBack = { navController.popBackStack() },
+                        onCreate = { chosen ->
+                            actions.organize(
+                                chosen.map { folder ->
+                                    folder.name to folder.photoIds.mapNotNull { state.photoIndex[it] }
+                                },
+                            ) { navController.popBackStack() }
+                        },
                     )
                 }
                 composable("settings") {

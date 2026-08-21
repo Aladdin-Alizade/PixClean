@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Difference
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
@@ -156,6 +157,14 @@ fun HomeScreen(
                 ) {
                     Icon(Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp))
                     Text("Üzləri tara və qruplaşdır", Modifier.padding(start = Space.sm))
+                }
+                OutlinedButton(
+                    onClick = { onOpen("folders/people") },
+                    enabled = !state.running && state.people.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(18.dp))
+                    Text("Şəxslərə görə qovluqlara ayır", Modifier.padding(start = Space.sm))
                 }
             }
         }
