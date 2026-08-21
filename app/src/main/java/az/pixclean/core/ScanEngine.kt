@@ -421,6 +421,36 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
         }
     }
 
+    /**
+     * Moves the faces that put [photoIds] in [from] over to [target], or into a group of their
+     * own when [target] is null. Pinned, so the next re-clustering keeps the correction.
+     */
+    fun movePhotosToPerson(from: PersonCluster, photoIds: Set<Long>, target: PersonCluster?) {
+        if (photoIds.isEmpty()) return
+        scope.launch {
+            val faceIds = from.faces.filter { it.photoId in photoIds }.map { it.faceId }
+            if (faceIds.isEmpty()) return@launch
+            withContext(Dispatchers.IO) {
+                if (target == null) {
+                    db.pinFacesTo(faceIds, db.nextClusterId(), db.createPerson())
+                } else {
+                    db.pinFacesTo(faceIds, target.clusterId, db.ensurePerson(target.clusterId))
+                }
+            }
+            refreshPeople()
+        }
+    }
+
+    private suspend fun refreshPeople() {
+        val embedder = withContext(Dispatchers.IO) { FaceEmbedders.create(app) }
+        try {
+            val faces = withContext(Dispatchers.IO) { db.allFaces(scanVersion(embedder)) }
+            set { copy(people = buildPeople(faces), faceCount = faces.size) }
+        } finally {
+            embedder.close()
+        }
+    }
+
     fun mergePeople(into: PersonCluster, from: List<PersonCluster>) {
         scope.launch {
             withContext(Dispatchers.IO) { db.mergeClusters(into.clusterId, from.map { it.clusterId }) }

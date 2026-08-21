@@ -302,7 +302,8 @@ fun SettingsScreen(
                 "Üz axtarışı dəqiqliyi",
                 "«Yüksək» rejimdə şəkil daha böyük ölçüdə analiz olunur, ona görə qrup " +
                     "fotolarındakı kiçik üzlər də tapılır — əvəzində tarama təxminən iki dəfə uzun çəkir. " +
-                    "Dəyişiklik üzlərin yenidən taranmasını tələb edir.",
+                    "Dəyişiklik üzlərin yenidən taranmasını tələb edir — əl ilə etdiyiniz " +
+                    "qrup dəyişiklikləri sıfırlanacaq.",
             ) {
                 ChipRow(
                     options = FaceDetail.entries,

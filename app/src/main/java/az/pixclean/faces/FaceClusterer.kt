@@ -104,6 +104,33 @@ object FaceClusterer {
             if (i % 256 == 0) onProgress(0.70f + 0.25f * i / usable.size)
         }
 
+        // 4. honour corrections
+        //
+        // A face the user moved by hand is an answer, not a guess, and re-running the maths
+        // must not undo it. Everything pinned to one person is pulled into a single cluster —
+        // the one most of them already landed in, or a fresh one if they scattered.
+        var nextCluster = (assign.maxOrNull() ?: -1) + 1
+        val pinnedPersons = HashMap<Long, MutableList<Int>>()
+        for (i in usable.indices) {
+            val f = usable[i]
+            if (f.pinned && f.personId > 0) pinnedPersons.getOrPut(f.personId) { ArrayList() }.add(i)
+        }
+        val forcedPerson = HashMap<Int, Long>()
+        for ((pid, members) in pinnedPersons) {
+            // The destination is where the person already lives, which is decided by their
+            // *unpinned* faces — the pinned one is by definition sitting in the wrong cluster,
+            // so asking where it landed would just move it back. With no unpinned faces the
+            // user is starting a new group, and that is a new cluster rather than whichever
+            // one the maths mistook it for.
+            val home = usable.indices
+                .filter { usable[it].personId == pid && !usable[it].pinned && assign[it] >= 0 }
+                .groupingBy { assign[it] }.eachCount()
+                .maxByOrNull { it.value }?.key
+                ?: nextCluster++
+            members.forEach { assign[it] = home }
+            forcedPerson[home] = pid
+        }
+
         // Keep whatever names the user already gave: a cluster inherits the person id most
         // of its members carried in, so renaming survives a rescan.
         val votes = HashMap<Int, HashMap<Long, Int>>()
@@ -117,6 +144,8 @@ object FaceClusterer {
         for ((cluster, tally) in votes) {
             personOf[cluster] = tally.maxByOrNull { it.value }!!.key
         }
+        // A pin outranks the vote: the cluster belongs to whoever the user said it does.
+        personOf.putAll(forcedPerson)
 
         val out = ArrayList<Assignment>(usable.size + (faces.size - usable.size))
         for (i in usable.indices) {
@@ -125,7 +154,12 @@ object FaceClusterer {
         }
         // Faces that failed the quality gate are parked, not silently kept in an old cluster.
         val usedIds = usable.mapTo(HashSet()) { it.faceId }
-        for (f in faces) if (f.faceId !in usedIds) out.add(Assignment(f.faceId, -1, 0L))
+        for (f in faces) {
+            if (f.faceId in usedIds) continue
+            // A pinned face keeps where the user put it even if the quality gate would drop it.
+            if (f.pinned) out.add(Assignment(f.faceId, f.clusterId, f.personId))
+            else out.add(Assignment(f.faceId, -1, 0L))
+        }
 
         onProgress(1f)
         return Result(out, remap.size, usable.size)

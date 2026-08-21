@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -19,11 +20,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +43,7 @@ import az.pixclean.data.Photo
 import az.pixclean.ui.LocalActions
 import az.pixclean.ui.components.EmptyState
 import az.pixclean.ui.components.FaceThumb
+import az.pixclean.ui.components.PersonPicker
 import az.pixclean.ui.components.PhotoThumb
 import az.pixclean.ui.components.TileCheckbox
 import az.pixclean.ui.components.SelectionBar
@@ -55,6 +59,8 @@ fun PersonDetailScreen(
     contentPadding: PaddingValues,
     onBack: () -> Unit,
     onRename: (PersonCluster, String) -> Unit,
+    allPeople: List<PersonCluster> = emptyList(),
+    onMoveToPerson: (PersonCluster, Set<Long>, PersonCluster?) -> Unit = { _, _, _ -> },
 ) {
     if (cluster == null) {
         EmptyState(
@@ -70,6 +76,7 @@ fun PersonDetailScreen(
     val photos = remember(cluster, photoIndex) { cluster.photoIds.mapNotNull { photoIndex[it] } }
     var selected by remember(cluster) { mutableStateOf(emptySet<Long>()) }
     var renaming by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
     val selectedPhotos = photos.filter { it.id in selected }
     val trashAvailable = useTrash && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
@@ -147,6 +154,26 @@ fun PersonDetailScreen(
             onMove = { album -> actions.move(selectedPhotos, album) { selected = emptySet() } },
             onClear = { selected = emptySet() },
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = contentPadding.calculateBottomPadding()),
+        ) {
+            // Grouping gets people wrong sometimes; this is the way to say so without
+            // deleting a photo that is perfectly good, just filed under the wrong face.
+            OutlinedButton(onClick = { moving = true }, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Rounded.SwapHoriz, null, Modifier.size(18.dp))
+                Text("Başqa qrupa köçür", Modifier.padding(start = Space.sm))
+            }
+        }
+    }
+
+    if (moving) {
+        PersonPicker(
+            people = allPeople.filter { it.clusterId != cluster.clusterId },
+            coverOf = { photoIndex[it.coverFace.photoId]?.uri },
+            onPick = { target ->
+                moving = false
+                onMoveToPerson(cluster, selected, target)
+                selected = emptySet()
+            },
+            onDismiss = { moving = false },
         )
     }
 

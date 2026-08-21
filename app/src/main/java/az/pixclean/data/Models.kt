@@ -80,6 +80,8 @@ class FaceRow(
     val embedding: FloatArray?,
     val clusterId: Int,
     val personId: Long,
+    /** True when the user placed this face in its group by hand. */
+    val pinned: Boolean = false,
 ) {
     val width: Int get() = right - left
     val height: Int get() = bottom - top

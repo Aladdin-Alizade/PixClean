@@ -3,14 +3,18 @@ package az.pixclean.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.DeleteSweep
@@ -31,10 +35,79 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import az.pixclean.data.Photo
 import az.pixclean.ui.theme.Radius
 import az.pixclean.ui.theme.Space
+
+/**
+ * Choosing which person some photos really belong to. Faces are shown rather than names,
+ * because half the groups have no name yet and a face is what the user is matching against.
+ */
+@Composable
+fun PersonPicker(
+    people: List<az.pixclean.data.PersonCluster>,
+    coverOf: (az.pixclean.data.PersonCluster) -> Any?,
+    onPick: (az.pixclean.data.PersonCluster?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Hansı qrupa köçürülsün?") },
+        text = {
+            androidx.compose.foundation.lazy.LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(Space.xs),
+                modifier = Modifier.heightIn(max = 380.dp),
+            ) {
+                item {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(Radius.md))
+                            .clickable { onPick(null) }
+                            .padding(Space.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Space.md),
+                    ) {
+                        Icon(Icons.Rounded.PersonAdd, null, tint = MaterialTheme.colorScheme.primary)
+                        Text("Yeni qrup yarat", style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                items(people, key = { it.clusterId }) { person ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(Radius.md))
+                            .clickable { onPick(person) }
+                            .padding(Space.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Space.md),
+                    ) {
+                        FaceThumb(
+                            model = coverOf(person),
+                            left = person.coverFace.left,
+                            top = person.coverFace.top,
+                            right = person.coverFace.right,
+                            bottom = person.coverFace.bottom,
+                            size = 40.dp,
+                        )
+                        Column {
+                            Text(person.displayName, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "${person.photoIds.size} şəkil",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İmtina") } },
+    )
+}
 
 /**
  * The bar that appears once something is selected. Removal is one tap away but the wording
@@ -48,6 +121,7 @@ fun SelectionBar(
     onMove: (album: String) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    extraAction: (@Composable () -> Unit)? = null,
 ) {
     var confirmHardDelete by remember { mutableStateOf(false) }
     var moveDialog by remember { mutableStateOf(false) }
@@ -79,6 +153,7 @@ fun SelectionBar(
                     }
                     TextButton(onClick = onClear) { Text("Ləğv et") }
                 }
+                extraAction?.invoke()
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
                     if (trashAvailable) {
                         Button(

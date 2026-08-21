@@ -290,6 +290,8 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         contentPadding = inner,
                         onBack = { navController.popBackStack() },
                         onRename = engine::renamePerson,
+                        allPeople = state.people,
+                        onMoveToPerson = engine::movePhotosToPerson,
                     )
                 }
             }

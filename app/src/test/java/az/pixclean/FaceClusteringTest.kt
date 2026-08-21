@@ -17,6 +17,7 @@ import kotlin.random.Random
 class FaceClusteringTest {
 
     private val dim = 192
+    private val PERSON_B = 77L
 
     private fun unit(rnd: Random): FloatArray =
         FaceEmbedders.l2Normalize(FloatArray(dim) { (rnd.nextFloat() - 0.5f) })
@@ -82,6 +83,44 @@ class FaceClusteringTest {
         val strict = FaceClusterer.cluster(faces, 0.72f).clusterCount
         val loose = FaceClusterer.cluster(faces, 0.52f).clusterCount
         assertTrue("strict=$strict loose=$loose", strict >= loose)
+    }
+
+    @Test
+    fun `a face the user moved by hand stays moved after re-clustering`() {
+        val rnd = Random(23)
+        val looksLikeA = unit(rnd)
+        val looksLikeB = unit(rnd)
+        val faces = ArrayList<FaceRow>()
+
+        repeat(5) { faces.add(face(it + 1L, jitter(looksLikeA, rnd, 0.1f))) }
+        repeat(5) {
+            val id = it + 10L
+            faces.add(FaceRow(id, id, 0, 0, 100, 100, 0.8f, jitter(looksLikeB, rnd, 0.1f), 0, PERSON_B))
+        }
+        // Looks like A to the maths, but the user says it is B. The pin has to win.
+        val stray = FaceRow(99L, 99L, 0, 0, 100, 100, 0.8f, jitter(looksLikeA, rnd, 0.1f), -1, PERSON_B, pinned = true)
+        faces.add(stray)
+
+        val result = FaceClusterer.cluster(faces, threshold = 0.62f)
+        val strayAssignment = result.assignments.first { it.faceId == 99L }
+        val bCluster = result.assignments.first { it.faceId == 10L }.clusterId
+
+        assertEquals("the moved face should sit with person B", bCluster, strayAssignment.clusterId)
+        assertEquals(PERSON_B, strayAssignment.personId)
+    }
+
+    @Test
+    fun `a pinned face survives the quality gate`() {
+        val rnd = Random(29)
+        val base = unit(rnd)
+        val good = (1L..4L).map { face(it, jitter(base, rnd, 0.1f), quality = 0.9f) }
+        val blurryButPinned =
+            FaceRow(50L, 50L, 0, 0, 100, 100, 0.02f, jitter(base, rnd, 0.1f), 7, PERSON_B, pinned = true)
+
+        val result = FaceClusterer.cluster(good + blurryButPinned, threshold = 0.62f)
+        val pinned = result.assignments.first { it.faceId == 50L }
+        assertEquals(7, pinned.clusterId)
+        assertEquals(PERSON_B, pinned.personId)
     }
 
     @Test

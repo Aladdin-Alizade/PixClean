@@ -16,7 +16,7 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
 
     companion object {
         private const val NAME = "pixclean.db"
-        private const val VERSION = 2
+        private const val VERSION = 3
 
         fun floatsToBlob(v: FloatArray): ByteArray {
             val bb = ByteBuffer.allocate(v.size * 4).order(ByteOrder.LITTLE_ENDIAN)
@@ -73,7 +73,8 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
               embedding BLOB,
               embVersion INTEGER NOT NULL DEFAULT 0,
               clusterId INTEGER NOT NULL DEFAULT -1,
-              personId INTEGER NOT NULL DEFAULT 0
+              personId INTEGER NOT NULL DEFAULT 0,
+              pinned INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent()
         )
@@ -103,6 +104,11 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // Adding a column is not a reason to make somebody scan ten thousand photos again.
+        if (oldVersion == 2 && newVersion == 3) {
+            runCatching { db.execSQL("ALTER TABLE faces ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") }
+            return
+        }
         db.execSQL("DROP TABLE IF EXISTS photos")
         db.execSQL("DROP TABLE IF EXISTS faces")
         db.execSQL("DROP TABLE IF EXISTS faceScan")
@@ -276,14 +282,14 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
     fun allFaces(embVersion: Int): List<FaceRow> {
         val out = ArrayList<FaceRow>(2048)
         readableDatabase.rawQuery(
-            "SELECT faceId,photoId,l,t,r,b,quality,embedding,clusterId,personId FROM faces WHERE embVersion=?",
+            "SELECT faceId,photoId,l,t,r,b,quality,embedding,clusterId,personId,pinned FROM faces WHERE embVersion=?",
             arrayOf(embVersion.toString())
         ).use { c ->
             while (c.moveToNext()) out.add(
                 FaceRow(
                     c.getLong(0), c.getLong(1), c.getInt(2), c.getInt(3), c.getInt(4), c.getInt(5),
                     c.getFloat(6), blobToFloats(if (c.isNull(7)) null else c.getBlob(7)),
-                    c.getInt(8), c.getLong(9)
+                    c.getInt(8), c.getLong(9), c.getInt(10) != 0
                 )
             )
         }
@@ -291,6 +297,9 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
     }
 
     fun writeClusters(rows: List<Triple<Long, Int, Long>>) = bulk(
+                // No pinned=0 guard here on purpose: the clusterer already pulls pinned faces to their
+        // person's cluster, so letting its numbering apply to them keeps ids consistent. Skipping
+        // them would strand a corrected face under a cluster id that no longer means anything.
         "UPDATE faces SET clusterId=?, personId=? WHERE faceId=?", rows
     ) { st, (faceId, cluster, person) ->
         st.bindLong(1, cluster.toLong()); st.bindLong(2, person); st.bindLong(3, faceId)
@@ -333,6 +342,39 @@ class Db(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, 
         }
         db.execSQL("UPDATE faces SET personId=? WHERE clusterId=?", arrayOf<Any>(pid, clusterId))
         return pid
+    }
+
+    /**
+     * A cluster the user is about to move faces into needs an identity that outlives the next
+     * re-clustering, so it gets a person row even when it has no name yet.
+     */
+    fun ensurePerson(clusterId: Int): Long {
+        val existing = readableDatabase.rawQuery(
+            "SELECT personId FROM faces WHERE clusterId=? AND personId>0 LIMIT 1",
+            arrayOf(clusterId.toString())
+        ).use { if (it.moveToFirst()) it.getLong(0) else 0L }
+        if (existing > 0) return existing
+        val pid = writableDatabase.insert("people", null, ContentValues().apply { put("name", "") })
+        writableDatabase.execSQL("UPDATE faces SET personId=? WHERE clusterId=?", arrayOf<Any>(pid, clusterId))
+        return pid
+    }
+
+    fun nextClusterId(): Int = readableDatabase
+        .rawQuery("SELECT IFNULL(MAX(clusterId), -1) + 1 FROM faces", null)
+        .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    fun createPerson(): Long =
+        writableDatabase.insert("people", null, ContentValues().apply { put("name", "") })
+
+    /**
+     * A hand-made correction is not a suggestion: it is pinned, so re-clustering has to keep it.
+     */
+    fun pinFacesTo(faceIds: Collection<Long>, clusterId: Int, personId: Long) {
+        if (faceIds.isEmpty()) return
+        writableDatabase.execSQL(
+            "UPDATE faces SET clusterId=?, personId=?, pinned=1 WHERE faceId IN (${faceIds.joinToString(",")})",
+            arrayOf<Any>(clusterId, personId)
+        )
     }
 
     fun mergeClusters(intoClusterId: Int, fromClusterIds: List<Int>) {
