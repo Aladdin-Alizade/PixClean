@@ -68,8 +68,9 @@ fun PeopleScreen(
         EmptyState(
             icon = Icons.Rounded.Groups,
             title = if (state.running) "Üzlər analiz edilir" else "Hələ üz taranmayıb",
-            body = "Hər şəkildə üz axtarılır, hər üz vektora çevrilir və eyni adam bir qrupa yığılır. " +
-                "Bu, dublikat taramasından yavaşdır — arxa fonda da davam edir.",
+            body = "Hər şəkildə üz axtarılır və eyni adamın şəkilləri bir qrupda toplanır. " +
+                "Dublikat taramasından uzun çəkir, amma arxa fonda davam edir — " +
+                "tətbiqi bağlaya bilərsiniz.",
             modifier = Modifier.padding(contentPadding),
         ) {
             Button(onClick = onScanFaces, enabled = !state.running) { Text("Üzləri tara") }
@@ -230,8 +231,9 @@ private fun AccuracyNote() {
                 modifier = Modifier.padding(top = 2.dp).size(20.dp),
             )
             Text(
-                "Bu qruplar sadə HOG deskriptoru ilə qurulub. Eyni gün, eyni işıqda çəkilmiş üzləri yaxşı tutur, " +
-                    "amma illər arası dəyişikliyi tutmur. Tənzimləmələrdən .tflite üz modeli əlavə edin.",
+                "Bu qruplar sadə üsulla qurulub: eyni vaxtda, oxşar işıqda çəkilmiş üzləri yaxşı tutur, " +
+                    "illər ərzində dəyişən sifətləri tutmur. Tənzimləmələrdən üz tanıma modeli " +
+                    "əlavə etsəniz xeyli dəqiqləşəcək.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = PixTheme.colors.onSimilarContainer,
             )

@@ -133,7 +133,7 @@ fun HomeScreen(
                     container = PixTheme.colors.keepContainer,
                     value = state.photoCount.toString(),
                     label = "şəkil",
-                    detail = if (state.flatSkipped > 0) "${state.flatSkipped} boş kadr atlandı" else "indeksdə",
+                    detail = if (state.flatSkipped > 0) "${state.flatSkipped} boş şəkil nəzərə alınmadı" else "indeksdə",
                     onClick = null,
                 )
             }
@@ -166,9 +166,10 @@ fun HomeScreen(
 
         item {
             Text(
-                "Dublikatlar bayt-bayt yoxlanılır: əvvəlcə ölçü, sonra ilk 64 KB, sonra tam SHA-256. " +
-                    "Oxşarlar isə iki müstəqil perseptual hash və rəng imzası ilə təsdiqlənir — " +
-                    "hazırkı rejim: ${prefs.similarity.label}.",
+                "Eyni fayllar dəqiq müqayisə ilə tapılır — burada səhv ehtimalı yoxdur. " +
+                    "Oxşar şəkillər isə şəklin özünə baxılaraq tapılır: kiçildilmiş, yenidən " +
+                    "göndərilmiş və ya sıxılmış nüsxələr. " +
+                    "Hazırkı həssaslıq: ${prefs.similarity.label}.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = Space.sm),
@@ -213,6 +214,12 @@ private fun ProgressCard(state: EngineState, onCancel: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(Radius.pill))
                 )
             }
+            Text(
+                "Arxa fonda davam edir — tətbiqi bağlaya, telefonu kilidləyə bilərsiniz. " +
+                    "Ekran sönsə də tarama dayanmır.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
     }
 }
@@ -241,8 +248,8 @@ private fun ModelHint(onSettings: () -> Unit) {
                     color = PixTheme.colors.onSimilarContainer,
                 )
                 Text(
-                    "Model faylı əlavə etsəniz eyni şəxsi illər sonra da tanıyacaq. " +
-                        "İndiki rejim yalnız oxşar şəraitdə çəkilmiş üzlərdə etibarlıdır.",
+                    "Üz tanıma modeli əlavə etsəniz eyni adamı illər sonra da tanıyacaq. " +
+                        "İndiki rejim yalnız yaxın vaxtda, oxşar şəraitdə çəkilmiş üzlərdə işləyir.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = PixTheme.colors.onSimilarContainer,
                 )

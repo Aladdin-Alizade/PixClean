@@ -55,6 +55,7 @@ import az.pixclean.ui.components.TileCheckbox
 import az.pixclean.ui.components.Pill
 import az.pixclean.ui.components.SelectionBar
 import az.pixclean.ui.components.humanBytes
+import az.pixclean.ui.components.similarityWords
 import az.pixclean.ui.theme.PixTheme
 import az.pixclean.ui.theme.Radius
 import az.pixclean.ui.theme.Space
@@ -119,7 +120,7 @@ fun GroupDetailScreen(
                         style = MaterialTheme.typography.titleLarge,
                     )
                     Text(
-                        "${members.size} nüsxə · ${humanBytes(others.sumOf { it.size })} azad edilə bilər",
+                        "${members.size} nüsxə · ${humanBytes(others.sumOf { it.size })} azad oluna bilər",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -290,7 +291,7 @@ private fun DuplicateTile(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (showDistance && distance != null) {
-                Pill("Δ$distance", PixTheme.colors.similar, PixTheme.colors.similarContainer)
+                Pill(similarityWords(distance), PixTheme.colors.similar, PixTheme.colors.similarContainer)
             }
         }
     }

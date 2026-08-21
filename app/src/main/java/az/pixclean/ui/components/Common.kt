@@ -42,6 +42,16 @@ import coil3.request.ImageRequest
 import coil3.compose.AsyncImage
 import java.util.Locale
 
+/**
+ * A Hamming distance means nothing to the person deciding whether to delete a photo.
+ * Three words do, and they are what the screens show; the number stays in the logs.
+ */
+fun similarityWords(distance: Int): String = when {
+    distance <= 2 -> "demək olar eyni"
+    distance <= 6 -> "çox oxşar"
+    else -> "oxşar"
+}
+
 fun humanBytes(n: Long): String {
     if (n <= 0) return "0 B"
     val units = arrayOf("B", "KB", "MB", "GB", "TB")

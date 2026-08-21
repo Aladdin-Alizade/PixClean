@@ -36,7 +36,7 @@ enum class Phase(val label: String) {
     IDLE(""),
     INDEXING("Qalereya oxunur"),
     HASHING("Eyni fayllar yoxlanılır"),
-    SIGNING("Şəkil imzaları hesablanır"),
+    SIGNING("Şəkillər müqayisəyə hazırlanır"),
     GROUPING("Qruplaşdırılır"),
     FACE_DETECT("Üzlər tapılır"),
     CLUSTERING("Üzlər qruplaşdırılır"),

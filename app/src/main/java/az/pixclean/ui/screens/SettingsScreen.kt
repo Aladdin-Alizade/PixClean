@@ -137,8 +137,8 @@ fun SettingsScreen(
                 "Taranacaq qovluqlar",
                 if (prefs.scanRoots.isEmpty())
                     "Hazırda bütün qalereya taranır. Konkret bir qovluq seçsəniz, yalnız orada " +
-                        "(və alt qovluqlarında) olan şəkillər analiz olunacaq — MediaStore-un görmədiyi " +
-                        "fayllar da daxil."
+                        "(və alt qovluqlarında) olan şəkillər analiz olunacaq — qalereyada " +
+                        "görünməyən fayllar da daxil."
                 else
                     "Yalnız aşağıdakı qovluqlar və onların alt qovluqları analiz olunur.",
             ) {
@@ -212,7 +212,7 @@ fun SettingsScreen(
             item {
                 Group(
                     "Hansı qovluqlar taransın",
-                    "Söndürülmüş qovluq hash-lənmir, üz axtarışına düşmür və qruplarda görünmür. " +
+                    "Söndürülmüş qovluq heç bir analizə düşmür və qruplarda görünmür. " +
                         "Qovluğu yenidən açandan sonra taramanı bir dəfə təkrarlayın.",
                 ) {}
             }
@@ -288,8 +288,8 @@ fun SettingsScreen(
                         },
                     )
                     Text(
-                        "Yenidən qruplaşdırmaq üçün şəkilləri təkrar analiz etmək lazım deyil — " +
-                            "vektorlar artıq yadda saxlanılıb.",
+                        "Bunu dəyişmək üçün şəkilləri təkrar analiz etmək lazım deyil — " +
+                            "üzlər artıq tapılıb, sadəcə yenidən qruplaşdırılır.",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -333,11 +333,11 @@ fun SettingsScreen(
             Group(
                 "Üz tanıma modeli",
                 when {
-                    state.modelBacked -> "İşləyir: ${state.embedderName}"
-                    modelPresent -> "Model faylı var, amma yüklənmir — sadə HOG rejimi işləyir. " +
+                    state.modelBacked -> "Model quraşdırılıb — tam dəqiqlik rejimi işləyir."
+                    modelPresent -> "Model faylı var, amma açılmır — sadə rejim işləyir. " +
                         "Faylı silib başqasını seçin."
-                    else -> "Hazırda sadə HOG deskriptoru işləyir. 112×112 giriş qəbul edən istənilən " +
-                        "MobileFaceNet / ArcFace .tflite faylı işə düşəcək."
+                    else -> "Hazırda sadə rejim işləyir. Üz tanıma modeli əlavə etsəniz eyni adamı " +
+                        "illər sonra da tanıyacaq. Hansı fayl lazım olduğu README-də yazılıb."
                 },
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
@@ -377,11 +377,11 @@ fun SettingsScreen(
         }
 
         item {
-            Group("İndeks", "Üz vektorları silinir, şəkillərə toxunulmur.") {
+            Group("Tapılmış üzlər", "Yalnız tapılmış üzlər silinir — şəkillərə toxunulmur.") {
                 OutlinedButton(onClick = {
                     engine.resetFaceIndex()
-                    actions.toast("Üz indeksi sıfırlandı")
-                }) { Text("Üz indeksini sıfırla") }
+                    actions.toast("Tapılmış üzlər silindi")
+                }) { Text("Üzləri sıfırla") }
             }
         }
 
@@ -394,13 +394,16 @@ fun SettingsScreen(
                 Column(Modifier.padding(Space.lg), verticalArrangement = Arrangement.spacedBy(Space.sm)) {
                     Text("Necə işləyir", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Eyni fayllar: ölçü → ilk 64 KB SHA-256 → tam SHA-256. Yalnız ölçüsü üst-üstə düşən " +
-                            "fayllar oxunur, ona görə minlərlə şəkil sürətlə yoxlanılır.\n\n" +
-                            "Oxşar şəkillər: 32×32 DCT üzərindən pHash, 9×8 qradiyent üzərindən dHash və " +
-                            "4×4 rəng imzası. Hər üçü razılaşmalıdır — bir hash-in səhvi tək başına qrup yaratmır.\n\n" +
-                            "Üzlər: ML Kit üzü tapır, gözlərə görə düzləndirilir, vektora çevrilir və kosinus " +
-                            "yaxınlığına görə qruplaşdırılır.\n\n" +
-                            "Heç bir şəkil və heç bir vektor cihazdan kənara çıxmır.",
+                        "Eyni fayllar: iki fayl bayt-bayt müqayisə olunur. Uyğun gəlirsə eyni " +
+                            "fayldırlar — burada təxmin yoxdur. Sürət üçün əvvəlcə ölçü yoxlanılır, " +
+                            "ona görə minlərlə şəkildən yalnız bir neçəsi açılır.\n\n" +
+                            "Oxşar şəkillər: şəklin adına və ölçüsünə yox, özünə baxılır. " +
+                            "Kiçildilmiş, yenidən göndərilmiş və ya sıxılmış nüsxə də tapılır. " +
+                            "Üç ayrı yoxlama razılaşmasa qrup yaranmır — birinin səhvi tək " +
+                            "başına qrup qurmur.\n\n" +
+                            "Üzlər: hər şəkildə üz axtarılır, gözlərə görə düzləndirilir və " +
+                            "eyni adamın şəkilləri bir qrupda toplanır.\n\n" +
+                            "Şəkilləriniz cihazdan kənara çıxmır — tətbiqin internet icazəsi yoxdur.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

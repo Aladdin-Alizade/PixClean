@@ -64,11 +64,11 @@ object FaceEmbedders {
         val embedder = try {
             TFLiteEmbedder(mapFile(file), file.length())
         } catch (e: Throwable) {
-            return "Bu fayl TFLite modeli deyil"
+            return "Bu fayl üz tanıma modeli deyil"
         }
         return try {
             if (embedder.dim !in 32..2048) {
-                "Modelin çıxışı ${embedder.dim} ölçülüdür — üz modeli 128–512 gözlənilir"
+                "Bu fayl üz tanıma modelinə oxşamır"
             } else null
         } finally {
             runCatching { embedder.close() }
@@ -162,7 +162,7 @@ class TFLiteEmbedder(model: MappedByteBuffer, modelLength: Long) : FaceEmbedder 
     }
 
     override val version: Int = 1000 + (modelLength % 900_000L).toInt() + outDim
-    override val displayName: String = "TFLite ${inW}x${inH} → ${outDim}d (${normalization.label})"
+    override val displayName: String = "Tam üz tanıma modeli"
     override val isModelBacked: Boolean = true
     override val dim: Int = outDim
     override val inputSize: Int = inW
@@ -262,7 +262,7 @@ class HogEmbedder : FaceEmbedder {
     }
 
     override val version: Int = 1
-    override val displayName: String = "Sadə HOG (model yoxdur)"
+    override val displayName: String = "Sadə rejim"
     override val isModelBacked: Boolean = false
     override val dim: Int = (CELLS - 1) * (CELLS - 1) * BINS * 4
     override val inputSize: Int = FaceAlign.SIZE

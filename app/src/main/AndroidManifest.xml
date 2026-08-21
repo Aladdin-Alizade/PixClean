@@ -14,6 +14,13 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!--
+      A foreground service keeps the process alive but not the CPU: with the screen off the
+      work stalls, which is why "it keeps running in the background" needs this to be true
+      rather than merely claimed. Held only while a scan is in flight.
+    -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!--
       ML Kit pulls INTERNET and ACCESS_NETWORK_STATE in through Play Services. This app never
       makes a network call and its face models are bundled in the APK, so both are stripped:
       "nothing leaves the device" should be enforced by the OS, not just promised by our code.

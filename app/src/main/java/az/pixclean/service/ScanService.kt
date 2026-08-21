@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import az.pixclean.MainActivity
 import az.pixclean.PixCleanApp
@@ -17,6 +18,7 @@ import az.pixclean.core.ScanEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -27,17 +29,29 @@ import kotlinx.coroutines.launch
 class ScanService : Service() {
 
     private var watcher: Job? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var lastStartId = 0
     private val scope = CoroutineScope(Dispatchers.Main.immediate)
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         startForegroundCompat(build("Hazırlanır", 0, 0))
+        acquireWakeLock()
         if (watcher == null) {
             watcher = scope.launch {
                 ScanEngine.get(this@ScanService).state.collectLatest { s ->
                     if (s.phase == Phase.IDLE) {
-                        stopSelf()
+                        // The engine passes through IDLE between phases — a photo scan ending
+                        // and a face scan starting is two events, not one. Stopping on the
+                        // first sighting killed the service the next phase had just started,
+                        // taking the wake lock with it. Wait, look again, and hand back the
+                        // start id so a newer command wins.
+                        delay(IDLE_GRACE_MS)
+                        if (ScanEngine.get(this@ScanService).state.value.phase == Phase.IDLE) {
+                            stopSelf(lastStartId)
+                        }
                         return@collectLatest
                     }
                     notify(build(s.phase.label, s.done, s.total))
@@ -50,7 +64,29 @@ class ScanService : Service() {
     override fun onDestroy() {
         watcher?.cancel()
         watcher = null
+        releaseWakeLock()
         super.onDestroy()
+    }
+
+    /**
+     * Timed out after two hours so a scan that dies without notice cannot hold the CPU awake
+     * for the rest of the day; the service releases it as soon as the engine goes idle anyway.
+     */
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        wakeLock = runCatching {
+            getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "PixClean:scan")
+                .apply {
+                    setReferenceCounted(false)
+                    acquire(2 * 60 * 60 * 1000L)
+                }
+        }.getOrNull()
+    }
+
+    private fun releaseWakeLock() {
+        runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
+        wakeLock = null
     }
 
     private fun build(text: String, done: Int, total: Int): Notification {
@@ -85,6 +121,7 @@ class ScanService : Service() {
 
     companion object {
         private const val ID = 42
+        private const val IDLE_GRACE_MS = 2_000L
 
         fun start(context: Context) {
             runCatching {

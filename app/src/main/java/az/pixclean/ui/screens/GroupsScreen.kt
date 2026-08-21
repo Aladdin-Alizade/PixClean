@@ -43,6 +43,7 @@ import az.pixclean.ui.components.PhotoThumb
 import az.pixclean.ui.components.Pill
 import az.pixclean.ui.components.SelectionBar
 import az.pixclean.ui.components.humanBytes
+import az.pixclean.ui.components.similarityWords
 import az.pixclean.ui.theme.PixTheme
 import az.pixclean.ui.theme.Radius
 import az.pixclean.ui.theme.Sizes
@@ -201,13 +202,13 @@ private fun GroupCard(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(Space.sm), verticalAlignment = Alignment.CenterVertically) {
                         if (group.kind == GroupKind.EXACT) {
-                            Pill("bayt-bayt eyni", MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.errorContainer)
+                            Pill("tam eyni fayl", MaterialTheme.colorScheme.error, MaterialTheme.colorScheme.errorContainer)
                         } else {
                             val worst = group.others.maxOfOrNull { it.distance } ?: 0
-                            Pill("oxşarlıq fərqi $worst", PixTheme.colors.similar, PixTheme.colors.similarContainer)
+                            Pill(similarityWords(worst), PixTheme.colors.similar, PixTheme.colors.similarContainer)
                         }
                         Text(
-                            "${group.others.size} artıq · ${humanBytes(group.reclaimable)}",
+                            "${group.others.size} əlavə nüsxə · ${humanBytes(group.reclaimable)}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

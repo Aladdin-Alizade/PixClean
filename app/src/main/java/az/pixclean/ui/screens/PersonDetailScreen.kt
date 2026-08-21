@@ -60,7 +60,7 @@ fun PersonDetailScreen(
         EmptyState(
             icon = Icons.Rounded.Groups,
             title = "Qrup tapılmadı",
-            body = "Üz indeksi yenidən qurulduğu üçün bu qrup dəyişdi.",
+            body = "Üzlər yenidən qruplaşdırıldığı üçün bu qrup dəyişdi.",
             modifier = Modifier.padding(contentPadding),
         ) { TextButton(onClick = onBack) { Text("Geri") } }
         return

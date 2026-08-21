@@ -128,9 +128,21 @@ fun PixCleanRoot(broker: ConsentBroker) {
         if (access == MediaAccess.FULL) engine.loadExisting()
     }
 
+    // An exception message is written for a developer. The user is told what it means for
+    // them instead; the original stays in the log for when it is actually needed.
     LaunchedEffect(state.error) {
-        state.error?.let {
-            snackbar.showSnackbar("Xəta: $it", withDismissAction = true)
+        state.error?.let { raw ->
+            android.util.Log.w("PixClean", "scan failed: $raw")
+            val friendly = when {
+                raw.contains("ENOSPC", true) || raw.contains("space", true) ->
+                    "Yaddaşda yer çatmadı."
+                raw.contains("permission", true) || raw.contains("Security", true) ->
+                    "Şəkillərə giriş icazəsi yoxdur. Tənzimləmələrdən icazə verin."
+                raw.contains("OutOfMemory", true) ->
+                    "Yaddaş çatmadı. Tətbiqi yenidən açıb cəhd edin."
+                else -> "Tarama yarımçıq qaldı. Yenidən cəhd edin."
+            }
+            snackbar.showSnackbar(friendly, withDismissAction = true)
             engine.clearError()
         }
     }
