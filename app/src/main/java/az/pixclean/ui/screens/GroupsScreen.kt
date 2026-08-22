@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,6 +61,7 @@ fun GroupsScreen(
     onScan: () -> Unit,
 ) {
     val actions = LocalActions.current
+    val working by actions.busy.collectAsStateWithLifecycle()
     var selected by remember(groups) { mutableStateOf(emptySet<Long>()) }
     val byId = remember(groups) { groups.flatMap { it.others.map { m -> m.photo } }.associateBy { it.id } }
     val selectedPhotos = remember(selected, byId) { selected.mapNotNull { byId[it] } }
@@ -129,6 +131,7 @@ fun GroupsScreen(
         SelectionBar(
             selected = selectedPhotos,
             trashAvailable = trashAvailable,
+            busy = working,
             onRemove = { toTrash -> actions.remove(selectedPhotos, toTrash) { selected = emptySet() } },
             onMove = { album -> actions.move(selectedPhotos, album) { selected = emptySet() } },
             onClear = { selected = emptySet() },

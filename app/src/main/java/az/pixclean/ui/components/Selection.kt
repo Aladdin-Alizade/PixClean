@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -121,10 +122,21 @@ fun SelectionBar(
     onMove: (album: String) -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    busy: Boolean = false,
     extraAction: (@Composable () -> Unit)? = null,
 ) {
     var confirmHardDelete by remember { mutableStateOf(false) }
     var moveDialog by remember { mutableStateOf(false) }
+
+    // A scan finishing rebuilds the groups and empties the selection underneath whatever is
+    // open. Leaving the dialog up would have it offer to delete nothing, and the button would
+    // do nothing when pressed — which reads as the app having locked up.
+    LaunchedEffect(selected.isEmpty()) {
+        if (selected.isEmpty()) {
+            confirmHardDelete = false
+            moveDialog = false
+        }
+    }
 
     AnimatedVisibility(
         visible = selected.isNotEmpty(),
@@ -158,6 +170,7 @@ fun SelectionBar(
                     if (trashAvailable) {
                         Button(
                             onClick = { onRemove(true) },
+                            enabled = !busy,
                             modifier = Modifier.weight(1f),
                         ) {
                             Icon(Icons.Rounded.DeleteSweep, null, Modifier.size(18.dp))
@@ -166,6 +179,7 @@ fun SelectionBar(
                     }
                     OutlinedButton(
                         onClick = { moveDialog = true },
+                        enabled = !busy,
                         modifier = Modifier.weight(1f),
                     ) {
                         Icon(Icons.Rounded.DriveFileMove, null, Modifier.size(18.dp))
@@ -173,6 +187,7 @@ fun SelectionBar(
                     }
                     OutlinedButton(
                         onClick = { confirmHardDelete = true },
+                        enabled = !busy,
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         ),

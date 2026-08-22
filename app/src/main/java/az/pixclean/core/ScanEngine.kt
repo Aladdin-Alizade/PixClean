@@ -16,7 +16,9 @@ import az.pixclean.faces.FaceClusterer
 import az.pixclean.faces.FaceEmbedder
 import az.pixclean.faces.FaceEmbedders
 import az.pixclean.faces.FaceScanner
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +28,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -94,18 +97,80 @@ class EngineState(
 class ScanEngine(private val app: Application, val settings: AppSettings) {
 
     private val db = Db(app)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Without this a failure anywhere in here — a database that cannot be opened, a model
+     * file that will not load, a photo whose bytes are gone mid-read — reaches the thread's
+     * default handler and takes the whole app down. Only the two scans were wrapped; renaming
+     * a person, merging two groups or restoring results at launch were one exception away
+     * from a crash with nothing on screen to explain it. Now the work stops, the user is told,
+     * and the app is still there.
+     */
+    private val failures = CoroutineExceptionHandler { _, e ->
+        android.util.Log.w("PixClean", "engine job failed", e)
+        _state.update { it.copy(phase = Phase.IDLE, error = e.message ?: e.toString()) }
+    }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + failures)
 
     private val _state = MutableStateFlow(EngineState())
     val state: StateFlow<EngineState> = _state
 
+    @Volatile
     private var job: Job? = null
+
+    /**
+     * Restoring the last results at launch. Deliberately not counted as [busy]: it raises no
+     * phase, so the buttons stay enabled — and while it lived in [job] a tap during those few
+     * seconds was swallowed by the busy check, leaving a scan button that looked ready and
+     * did nothing. A scan the user asks for now supersedes it.
+     */
+    @Volatile
+    private var loadJob: Job? = null
+
+    /**
+     * Set when a settings change asks for work the current job is in the way of. Dropping the
+     * request instead left the user looking at a setting that said one thing and a list that
+     * said another, with no button left to press to reconcile them.
+     */
+    @Volatile
+    private var regroupWanted = false
+
+    @Volatile
+    private var reclusterWanted = false
 
     private val ioWorkers = (Runtime.getRuntime().availableProcessors() * 2).coerceIn(4, 12)
     private val cpuWorkers = Runtime.getRuntime().availableProcessors().coerceIn(2, 8)
     private val faceWorkers = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4)
 
     val busy: Boolean get() = job?.isActive == true
+
+    /**
+     * Called the instant long work is asked for, so the foreground service and its wake lock
+     * exist before the screen has a chance to go off.
+     *
+     * This used to be driven from the UI, by watching the phase from inside the composition.
+     * That works only while the app is on screen: locking the phone in the moment between the
+     * tap and the first phase change meant the service was never started, the CPU was never
+     * held, and the scan the progress card promised would "continue in the background" quietly
+     * stalled until the phone was woken again. Starting from here also keeps the app on the
+     * right side of the rule that a foreground service may only be started while in the
+     * foreground — which is exactly where the user is when they press the button.
+     */
+    var onWorkStarted: (() -> Unit)? = null
+
+    private fun begin() = runCatching { onWorkStarted?.invoke() }
+
+    /**
+     * Re-arms the service for work that is already running.
+     *
+     * The system is allowed to stop a foreground service on its own — a data-sync one has a
+     * daily budget — and the scan carries on without it, unprotected. Coming back to the app
+     * is the one moment where starting a foreground service is unambiguously permitted, so it
+     * is also the moment to check.
+     */
+    fun keepAlive() {
+        if (busy) begin()
+    }
 
     /**
      * The single answer to "which photos is this app allowed to touch". Applied by hashing,
@@ -146,22 +211,73 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
     fun cancel() {
         job?.cancel()
         job = null
-        _state.value = _state.value.copy(phase = Phase.IDLE)
+        set { copy(phase = Phase.IDLE) }
+        // A setting changed during the scan is still a setting the user changed. Stopping the
+        // scan is not a reason to forget it — the results would go on disagreeing with the
+        // screen that set them.
+        runPending()
+    }
+
+    /**
+     * Starts one piece of long work.
+     *
+     * The phase goes up here, before the coroutine is given a thread, so from the instant of
+     * the tap the screen and [busy] agree. They used to disagree: [recluster] raised its phase
+     * only after loading the face model off disk, and every tap in that window hit an enabled
+     * button and was dropped on the floor by the busy check.
+     */
+    private fun start(phase: Phase, block: suspend () -> Unit): Boolean {
+        if (busy) return false
+        loadJob?.cancel()
+        loadJob = null
+        begin()
+        set { copy(phase = phase, done = 0, total = 0, error = null) }
+        val mine = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                block()
+            } catch (c: kotlinx.coroutines.CancellationException) {
+                throw c
+            } catch (e: Throwable) {
+                android.util.Log.w("PixClean", "scan failed", e)
+                set { copy(error = e.message ?: e.toString()) }
+            } finally {
+                // Only if nothing has taken over in the meantime: a cancel followed straight
+                // away by a new scan must not have the old job's exit wipe the new one's phase.
+                finishIfCurrent(coroutineContext[Job])
+            }
+        }
+        job = mine
+        mine.start()
+        return true
+    }
+
+    private fun finishIfCurrent(mine: Job?) {
+        if (job !== mine) return
+        job = null
+        set { copy(phase = Phase.IDLE) }
+        runPending()
+    }
+
+    private fun runPending() {
+        if (!regroupWanted && !reclusterWanted) return
+        // Back through the scope rather than straight into regroup(): this can be reached from
+        // a worker thread while every other caller is on the main one, and `job` should only
+        // ever be handed over in one place.
+        scope.launch(Dispatchers.Main) {
+            if (regroupWanted) {
+                regroupWanted = false
+                regroup()
+            } else if (reclusterWanted) {
+                reclusterWanted = false
+                recluster()
+            }
+        }
     }
 
     // ------------------------------------------------------------ photo scan
 
     fun scanPhotos() {
-        if (busy) return
-        job = scope.launch {
-            try {
-                runPhotoScan()
-            } catch (c: kotlinx.coroutines.CancellationException) {
-                throw c
-            } catch (e: Throwable) {
-                _state.value = _state.value.copy(phase = Phase.IDLE, error = e.message ?: e.toString())
-            }
-        }
+        start(Phase.INDEXING) { runPhotoScan() }
     }
 
     private suspend fun runPhotoScan() {
@@ -232,16 +348,7 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
     // ------------------------------------------------------------- face scan
 
     fun scanFaces() {
-        if (busy) return
-        job = scope.launch {
-            try {
-                runFaceScan()
-            } catch (c: kotlinx.coroutines.CancellationException) {
-                throw c
-            } catch (e: Throwable) {
-                _state.value = _state.value.copy(phase = Phase.IDLE, error = e.message ?: e.toString())
-            }
-        }
+        start(Phase.FACE_DETECT) { runFaceScan() }
     }
 
     private suspend fun runFaceScan() {
@@ -293,7 +400,7 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
         val faces = withContext(Dispatchers.IO) { db.allFaces(scanVersion(embedder)) }
         val threshold = embedder.threshold(settings.value.faceLevel)
         val result = FaceClusterer.cluster(faces, threshold) { p ->
-            _state.value = _state.value.copy(done = (p * 100).toInt(), total = 100)
+            _state.update { it.copy(done = (p * 100).toInt(), total = 100) }
         }
         withContext(Dispatchers.IO) {
             db.writeClusters(result.assignments.map { Triple(it.faceId, it.clusterId, it.personId) })
@@ -304,17 +411,16 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
 
     /** Re-clusters using stored embeddings only. Cheap enough to run when a slider moves. */
     fun recluster() {
-        if (busy) return
-        job = scope.launch {
+        val going = start(Phase.CLUSTERING) {
             val embedder = withContext(Dispatchers.IO) { FaceEmbedders.create(app) }
             try {
-                set { copy(phase = Phase.CLUSTERING, done = 0, total = 100) }
+                set { copy(done = 0, total = 100) }
                 clusterInternal(embedder)
             } finally {
                 embedder.close()
-                set { copy(phase = Phase.IDLE) }
             }
         }
+        if (!going) reclusterWanted = true
     }
 
     private fun buildPeople(faces: List<FaceRow>): List<PersonCluster> {
@@ -348,13 +454,14 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
 
     // -------------------------------------------------------------- grouping
 
+    /**
+     * A regroup asked for while something else is running is remembered rather than dropped.
+     * These come from the settings screen — a sensitivity chip, an album switched off — and
+     * silently ignoring one leaves the user looking at a setting that says one thing and a
+     * list that says another, with nothing to press to reconcile them.
+     */
     fun regroup() {
-        if (busy) return
-        job = scope.launch {
-            set { copy(phase = Phase.GROUPING) }
-            regroupInternal()
-            set { copy(phase = Phase.IDLE) }
-        }
+        if (!start(Phase.GROUPING) { regroupInternal() }) regroupWanted = true
     }
 
     /**
@@ -472,8 +579,8 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
     }
 
     fun loadExisting() {
-        if (busy) return
-        job = scope.launch {
+        if (busy || loadJob?.isActive == true) return
+        loadJob = scope.launch {
             val photos = withContext(Dispatchers.IO) { db.allPhotos() }
             if (photos.isEmpty()) return@launch
             regroupInternal(silent = true)
@@ -499,8 +606,14 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
 
     // ------------------------------------------------------------------ util
 
+    /**
+     * Read, change, write — as one step. Photo scanning, face refreshes after a delete and a
+     * rename all write here from different threads, and doing it in two steps let one of them
+     * overwrite a field it had never read: a delete landing mid-scan could put the old group
+     * list back and the screen would offer photos that were already gone.
+     */
     private inline fun set(block: EngineState.() -> EngineState) {
-        _state.value = _state.value.block()
+        _state.update { it.block() }
     }
 
     @Volatile private var lastTick = 0L
@@ -509,7 +622,7 @@ class ScanEngine(private val app: Application, val settings: AppSettings) {
         val now = System.currentTimeMillis()
         if (n == total || now - lastTick > 120) {
             lastTick = now
-            _state.value = _state.value.copy(done = n, total = total)
+            _state.update { it.copy(done = n, total = total) }
         }
     }
 

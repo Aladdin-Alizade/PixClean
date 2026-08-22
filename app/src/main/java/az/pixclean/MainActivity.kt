@@ -13,7 +13,7 @@ import az.pixclean.ui.theme.PixCleanTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val broker = ConsentBroker()
+    private val broker = ConsentBroker.shared
 
     private val consentLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -24,19 +24,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        broker.launch = { sender: IntentSender ->
+        broker.attach { sender: IntentSender ->
             runCatching { consentLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
                 .onFailure { broker.deliver(false) }
         }
         setContent {
             PixCleanTheme {
-                PixCleanRoot(broker = broker)
+                PixCleanRoot()
             }
         }
     }
 
     override fun onDestroy() {
-        broker.launch = null
+        broker.detach(recreating = isChangingConfigurations)
         super.onDestroy()
     }
 }

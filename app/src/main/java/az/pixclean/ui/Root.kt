@@ -32,7 +32,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,14 +46,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import az.pixclean.core.ConsentBroker
 import az.pixclean.core.MediaAccess
 import az.pixclean.core.Permissions
-import az.pixclean.core.Phase
 import az.pixclean.core.ScanEngine
 import az.pixclean.data.FolderPlanKind
 import az.pixclean.data.FolderPlans
-import az.pixclean.service.ScanService
 import az.pixclean.ui.components.EmptyState
 import az.pixclean.ui.screens.GroupDetailScreen
 import az.pixclean.ui.screens.FoldersScreen
@@ -75,15 +71,21 @@ private val TABS = listOf(
 )
 
 @Composable
-fun PixCleanRoot(broker: ConsentBroker) {
+fun PixCleanRoot() {
     val context = LocalContext.current
     val engine = remember { ScanEngine.get(context) }
     val state by engine.state.collectAsStateWithLifecycle()
     val prefs by engine.settings.state.collectAsStateWithLifecycle()
 
     val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    val actions = remember { Actions(context.applicationContext, engine, broker, scope, snackbar) }
+    val actions = remember { Actions.get(context) }
+    val working by actions.busy.collectAsStateWithLifecycle()
+
+    // The work outlives this screen, so its receipts arrive on a flow rather than being shown
+    // from inside it: a delete that finishes after a rotation still gets to say so.
+    LaunchedEffect(actions) {
+        actions.messages.collect { snackbar.showMessage(it) }
+    }
 
     var access by remember { mutableStateOf(Permissions.access(context)) }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -121,14 +123,12 @@ fun PixCleanRoot(broker: ConsentBroker) {
         }
     }
 
-    // The engine keeps running when the app is backgrounded; the service is what stops the
-    // system from killing it half way through ten thousand photos.
-    LaunchedEffect(state.phase) {
-        if (state.phase != Phase.IDLE) ScanService.start(context) else ScanService.stop(context)
-    }
-
     LaunchedEffect(access) {
         if (access == MediaAccess.FULL) engine.loadExisting()
+    }
+
+    LaunchedEffect(state.running) {
+        if (state.running) engine.keepAlive()
     }
 
     // An exception message is written for a developer. The user is told what it means for
@@ -189,6 +189,32 @@ fun PixCleanRoot(broker: ConsentBroker) {
     val route = backStack?.destination
     val showBar = TABS.any { tab -> route?.hierarchy?.any { it.route == tab.route } == true }
 
+    /**
+     * Switching tabs, from the bar or from a card on the home screen.
+     *
+     * The home screen's shortcuts used to push a plain copy of the tab instead, which reads
+     * the same but leaves the app one destination deeper each time and stacks entries the bar
+     * then has to reconcile with its own saved ones. Both routes into a tab now mean the same
+     * thing, so the bar always agrees with what is on screen.
+     */
+    fun openTab(target: String) {
+        navController.navigate(target) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    /**
+     * [launchSingleTop] because a second tap lands before the first screen has drawn. Without
+     * it an impatient double tap stacked two copies of the same screen, and the user had to
+     * press back twice to leave something they had opened once.
+     */
+    fun open(target: String) {
+        if (TABS.any { it.route == target }) openTab(target)
+        else navController.navigate(target) { launchSingleTop = true }
+    }
+
     CompositionLocalProvider(LocalActions provides actions) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
@@ -199,13 +225,7 @@ fun PixCleanRoot(broker: ConsentBroker) {
                             val selected = route?.hierarchy?.any { it.route == tab.route } == true
                             NavigationBarItem(
                                 selected = selected,
-                                onClick = {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
+                                onClick = { openTab(tab.route) },
                                 icon = { Icon(tab.icon, null) },
                                 label = { Text(tab.label) },
                             )
@@ -227,8 +247,8 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         onScanPhotos = { askNotificationsOnce(); engine.scanPhotos() },
                         onScanFaces = { askNotificationsOnce(); engine.scanFaces() },
                         onCancel = engine::cancel,
-                        onOpen = { navController.navigate(it) },
-                        onSettings = { navController.navigate("settings") },
+                        onOpen = { open(it) },
+                        onSettings = { open("settings") },
                     )
                 }
                 composable("exact") {
@@ -238,7 +258,7 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         state = state,
                         useTrash = prefs.useTrash,
                         contentPadding = inner,
-                        onOpenGroup = { navController.navigate("group/exact/${it.keeper.id}") },
+                        onOpenGroup = { open("group/exact/${it.keeper.id}") },
                         onScan = engine::scanPhotos,
                     )
                 }
@@ -249,7 +269,7 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         state = state,
                         useTrash = prefs.useTrash,
                         contentPadding = inner,
-                        onOpenGroup = { navController.navigate("group/similar/${it.keeper.id}") },
+                        onOpenGroup = { open("group/similar/${it.keeper.id}") },
                         onScan = engine::scanPhotos,
                     )
                 }
@@ -259,7 +279,7 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         prefs = prefs,
                         contentPadding = inner,
                         onScanFaces = engine::scanFaces,
-                        onOpenPerson = { navController.navigate("person/${it.clusterId}") },
+                        onOpenPerson = { open("person/${it.clusterId}") },
                         onRename = engine::renamePerson,
                         onMerge = engine::mergePeople,
                     )
@@ -280,7 +300,7 @@ fun PixCleanRoot(broker: ConsentBroker) {
                         kind = kind,
                         proposals = proposals,
                         photoIndex = state.photoIndex,
-                        busy = state.running,
+                        busy = state.running || working,
                         contentPadding = inner,
                         onBack = { navController.popBackStack() },
                         onCreate = { chosen ->
@@ -288,7 +308,15 @@ fun PixCleanRoot(broker: ConsentBroker) {
                                 chosen.map { folder ->
                                     folder.name to folder.photoIds.mapNotNull { state.photoIndex[it] }
                                 },
-                            ) { navController.popBackStack() }
+                            ) {
+                                // Names this screen instead of popping whatever happens to be
+                                // on top. Moving thousands of files takes long enough for the
+                                // user to have pressed back and gone somewhere else by the
+                                // time this runs, and a bare pop would then close *that* — or,
+                                // from the home tab, empty the back stack and leave a blank
+                                // window with no way out but killing the app.
+                                navController.popBackStack(entry.destination.id, inclusive = true)
+                            }
                         },
                     )
                 }

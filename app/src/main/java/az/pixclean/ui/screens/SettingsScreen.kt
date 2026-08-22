@@ -174,7 +174,7 @@ fun SettingsScreen(
                                         overflow = TextOverflow.MiddleEllipsis,
                                     )
                                 }
-                                IconButton(onClick = {
+                                IconButton(enabled = !state.running, onClick = {
                                     engine.settings.update(scanRoots = prefs.scanRoots - root)
                                     runCatching {
                                         context.contentResolver.releasePersistableUriPermission(
@@ -345,11 +345,14 @@ fun SettingsScreen(
                 },
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.sm)) {
-                    OutlinedButton(onClick = { importModel.launch(arrayOf("*/*")) }) {
+                    OutlinedButton(
+                        onClick = { importModel.launch(arrayOf("*/*")) },
+                        enabled = !state.running,
+                    ) {
                         Text(if (imported) "Başqa model seç" else "Öz modelinizi yükləyin")
                     }
                     if (imported) {
-                        TextButton(onClick = {
+                        TextButton(enabled = !state.running, onClick = {
                             FaceEmbedders.modelPath(context).delete()
                             imported = FaceEmbedders.hasImportedModel(context)
                             engine.resetFaceIndex()
@@ -382,7 +385,7 @@ fun SettingsScreen(
 
         item {
             Group("Tapılmış üzlər", "Yalnız tapılmış üzlər silinir — şəkillərə toxunulmur.") {
-                OutlinedButton(onClick = {
+                OutlinedButton(enabled = !state.running, onClick = {
                     engine.resetFaceIndex()
                     actions.toast("Tapılmış üzlər silindi")
                 }) { Text("Üzləri sıfırla") }

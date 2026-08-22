@@ -31,6 +31,8 @@ class ScanService : Service() {
     private var watcher: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastStartId = 0
+    private var lastNotifyAt = 0L
+    private var lastPhase: Phase? = null
     private val scope = CoroutineScope(Dispatchers.Main.immediate)
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -54,7 +56,17 @@ class ScanService : Service() {
                         }
                         return@collectLatest
                     }
-                    notify(build(s.phase.label, s.done, s.total))
+                    // The engine reports progress several times a second. Posting that many
+                    // notifications gets the app rate-limited by the system, which then drops
+                    // updates of its own choosing — including, sometimes, the last one, leaving
+                    // a progress bar frozen part-way through a scan that actually finished.
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val finished = s.total > 0 && s.done >= s.total
+                    if (s.phase != lastPhase || finished || now - lastNotifyAt >= NOTIFY_EVERY_MS) {
+                        lastPhase = s.phase
+                        lastNotifyAt = now
+                        notify(build(s.phase.label, s.done, s.total))
+                    }
                 }
             }
         }
@@ -122,6 +134,7 @@ class ScanService : Service() {
     companion object {
         private const val ID = 42
         private const val IDLE_GRACE_MS = 2_000L
+        private const val NOTIFY_EVERY_MS = 900L
 
         fun start(context: Context) {
             runCatching {
@@ -132,10 +145,6 @@ class ScanService : Service() {
                     context.startService(i)
                 }
             }
-        }
-
-        fun stop(context: Context) {
-            runCatching { context.stopService(Intent(context, ScanService::class.java)) }
         }
     }
 }

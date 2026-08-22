@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import az.pixclean.core.ScanEngine
+import az.pixclean.service.ScanService
 
 class PixCleanApp : Application() {
 
@@ -18,7 +19,9 @@ class PixCleanApp : Application() {
             ).apply { description = "Şəkillər analiz edilərkən göstərilir" }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
-        ScanEngine.get(this)
+        // Wired here rather than in the UI because the process outlives the screen: the
+        // service has to come up the moment work starts, whatever the activity is doing.
+        ScanEngine.get(this).onWorkStarted = { ScanService.start(this) }
     }
 
     companion object {
