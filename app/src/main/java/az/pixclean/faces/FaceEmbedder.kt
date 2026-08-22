@@ -71,18 +71,50 @@ object FaceEmbedders {
             return "Bu fayl üz tanıma modeli deyil"
         }
         return try {
-            if (embedder.dim !in 32..2048) {
-                "Bu fayl üz tanıma modelinə oxşamır"
-            } else null
+            when {
+                embedder.dim !in 32..2048 -> "Bu fayl üz tanıma modelinə oxşamır"
+                !runs(embedder) -> "Bu model bu telefonda işləmir"
+                else -> null
+            }
         } finally {
             runCatching { embedder.close() }
         }
     }
 
+    /**
+     * Runs one blank face through the model.
+     *
+     * Building an interpreter proves the file parses, not that it computes: a graph can load
+     * and then throw on every single call. [FaceScanner] turns that into "this photo had no
+     * faces", so without this check the app detects thousands of faces, discards every one of
+     * them and shows an empty People tab with no error anywhere. One inference at startup is
+     * the difference between the simple mode taking over and the feature quietly doing nothing.
+     */
+    private fun runs(embedder: FaceEmbedder): Boolean {
+        val probe = try {
+            Bitmap.createBitmap(embedder.inputSize, embedder.inputSize, Bitmap.Config.ARGB_8888)
+        } catch (_: Throwable) {
+            return false
+        }
+        return try {
+            embedder.embed(probe) != null
+        } catch (_: Throwable) {
+            false
+        } finally {
+            probe.recycle()
+        }
+    }
+
+    private fun usable(embedder: TFLiteEmbedder): FaceEmbedder? {
+        if (embedder.dim in 32..2048 && runs(embedder)) return embedder
+        runCatching { embedder.close() }
+        return null
+    }
+
     fun create(context: Context): FaceEmbedder {
         val imported = modelPath(context)
         if (imported.exists() && imported.length() > 1024) {
-            runCatching { return TFLiteEmbedder(mapFile(imported), imported.length()) }
+            runCatching { usable(TFLiteEmbedder(mapFile(imported), imported.length()))?.let { return it } }
                 .onFailure { Log.w(TAG, "imported model unusable, falling back", it) }
         }
         if (hasBundledModel(context)) {
@@ -90,9 +122,10 @@ object FaceEmbedders {
                 val afd = context.assets.openFd(MODEL_FILE)
                 val buffer = FileInputStream(afd.fileDescriptor).channel
                     .map(FileChannel.MapMode.READ_ONLY, afd.startOffset, afd.declaredLength)
-                return TFLiteEmbedder(buffer, afd.declaredLength)
+                usable(TFLiteEmbedder(buffer, afd.declaredLength))?.let { return it }
             }.onFailure { Log.w(TAG, "asset model unusable, falling back", it) }
         }
+        Log.w(TAG, "no usable face model, using the simple descriptor")
         return HogEmbedder()
     }
 
@@ -136,9 +169,23 @@ class TFLiteEmbedder(model: MappedByteBuffer, modelLength: Long) : FaceEmbedder 
     private val pixels: IntArray
     private val normalization: Normalization
 
+    /**
+     * How many faces the graph insists on being handed at once.
+     *
+     * Exports are not always saved with a batch of one — the model shipped in this app
+     * declares two — and handing a single face to a graph that wants two throws on every
+     * call. Nothing crashes: the throw is caught, becomes "no embedding", and the app detects
+     * every face in the gallery and then groups none of them. Reshaping the graph down to one
+     * looks like the tidy fix and is not reliable (the input reshapes, the output keeps its
+     * old batch, and the run fails differently), so the model is fed the batch it asks for
+     * and only the first row of the answer is used.
+     */
+    private val batch: Int
+
     init {
         val inT = interpreter.getInputTensor(0)
         val shape = inT.shape()
+        batch = if (shape.isNotEmpty()) shape[0].coerceAtLeast(1) else 1
         inH = if (shape.size >= 3) shape[1] else FaceAlign.SIZE
         inW = if (shape.size >= 3) shape[2] else FaceAlign.SIZE
         quantizedIn = inT.dataType() == DataType.UINT8
@@ -161,11 +208,19 @@ class TFLiteEmbedder(model: MappedByteBuffer, modelLength: Long) : FaceEmbedder 
         }
 
         val bytesPerChannel = if (quantizedIn) 1 else 4
-        inBuffer = ByteBuffer.allocateDirect(inH * inW * 3 * bytesPerChannel).order(ByteOrder.nativeOrder())
+        inBuffer = ByteBuffer
+            .allocateDirect(batch * inH * inW * 3 * bytesPerChannel)
+            .order(ByteOrder.nativeOrder())
         pixels = IntArray(inH * inW)
     }
 
-    override val version: Int = 1000 + (modelLength % 900_000L).toInt() + outDim
+    /**
+     * Bumped when the way a face is fed to the model changes, not only when the model does:
+     * an install that scanned a whole gallery with the broken batch has thousands of rows
+     * saying "this photo has no faces", and they have to be thrown away for the fix to be
+     * visible to the person who already ran it.
+     */
+    override val version: Int = 2000 + (modelLength % 900_000L).toInt() + outDim
     override val displayName: String = "Tam üz tanıma modeli"
     override val isModelBacked: Boolean = true
     override val dim: Int = outDim
@@ -226,16 +281,25 @@ class TFLiteEmbedder(model: MappedByteBuffer, modelLength: Long) : FaceEmbedder 
                 }
             }
         }
+        // A graph that wants more than one face gets the same face repeated: the first row of
+        // the output is the answer, the rest is the price of an export we did not make.
+        val slot = inBuffer.position()
+        repeat(batch - 1) {
+            val first = inBuffer.duplicate()
+            first.position(0)
+            first.limit(slot)
+            inBuffer.put(first)
+        }
         inBuffer.rewind()
         if (src !== aligned) src.recycle()
 
         val out: FloatArray
         if (quantizedOut) {
-            val raw = Array(1) { ByteArray(outDim) }
+            val raw = Array(batch) { ByteArray(outDim) }
             interpreter.run(inBuffer, raw)
             out = FloatArray(outDim) { ((raw[0][it].toInt() and 0xFF) - outZero) * outScale }
         } else {
-            val raw = Array(1) { FloatArray(outDim) }
+            val raw = Array(batch) { FloatArray(outDim) }
             interpreter.run(inBuffer, raw)
             out = raw[0]
         }

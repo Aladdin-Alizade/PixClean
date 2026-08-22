@@ -40,8 +40,14 @@ class FaceScanner(
         /** Below this many pixels in the analysis frame the face has no usable detail. */
         private const val MIN_FACE_PX = 40
         private const val MAX_YAW = 45f
-        private const val MAX_ROLL = 30f
 
+        /**
+         * Only applied to faces with no eye landmarks. With eyes, [FaceAlign] rotates the crop
+         * upright from the eye line, so a head tilted forty degrees embeds like an upright one
+         * — and a selfie held at an angle is one of the most common photos there is. Rejecting
+         * on tilt threw those away for nothing.
+         */
+        private const val MAX_ROLL = 30f
     }
 
     private val detector: FaceDetector = FaceDetection.getClient(
@@ -85,10 +91,13 @@ class FaceScanner(
 
         val yaw = face.headEulerAngleY
         val roll = face.headEulerAngleZ
-        if (abs(yaw) > MAX_YAW || abs(roll) > MAX_ROLL) return null
+        if (abs(yaw) > MAX_YAW) return null
 
         val eyeA = face.getLandmark(FaceLandmark.LEFT_EYE)?.position
         val eyeB = face.getLandmark(FaceLandmark.RIGHT_EYE)?.position
+        val hasEyes = eyeA != null && eyeB != null
+        if (!hasEyes && abs(roll) > MAX_ROLL) return null
+
         val aligned = FaceAlign.align(
             bmp, clipped,
             eyeA?.let { PointF(it.x, it.y) },
@@ -103,10 +112,9 @@ class FaceScanner(
         } ?: return null
 
         val relSize = min(clipped.width(), clipped.height()).toFloat() / min(bmp.width, bmp.height)
-        val hasEyes = eyeA != null && eyeB != null
         val quality = (min(relSize / 0.35f, 1f) * 0.45f) +
             ((1f - abs(yaw) / MAX_YAW) * 0.25f) +
-            ((1f - abs(roll) / MAX_ROLL) * 0.15f) +
+            ((1f - min(abs(roll), MAX_ROLL) / MAX_ROLL) * 0.15f) +
             (if (hasEyes) 0.15f else 0f)
 
         // Stored as a *square* box with a little headroom. Keeping it square in pixel space
